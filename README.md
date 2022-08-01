@@ -13,11 +13,11 @@ import (
 )
 
 func main() {
-    handler := kommando.NewKommando(types.Config{
+    app := kommando.NewKommando(types.Config{
         AppName: "Kommando Test App",
     })
 
-    handler.AddCommand(
+    app.AddCommand(
         &types.Command{
             Name: "test",
             Description: "Hello world test example!",
@@ -26,5 +26,7 @@ func main() {
             },
         },
     )
+
+    app.Run()
 }
 ```
