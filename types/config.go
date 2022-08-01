@@ -24,12 +24,6 @@ func (c *Config) AddCommand(cmd *Command) {
 func (c *Config) Run() {
 	args := os.Args[1:]
 
-	if len(args) == 0 {
-		c.createCommandList()
-
-		return
-	}
-
 	c.commands = append(c.commands, Command{
 		Name:        "help",
 		Description: "Basic helper command where you can get information about commands.",
@@ -37,6 +31,12 @@ func (c *Config) Run() {
 			c.createCommandList()
 		},
 	})
+
+	if len(args) == 0 {
+		c.createCommandList()
+
+		return
+	}
 
 	for _, cmd := range c.commands {
 		if cmd.Name == args[0] {
