@@ -40,7 +40,7 @@ func (c *Config) Run() {
 
 	for _, cmd := range c.commands {
 		if cmd.Name == args[0] {
-			parsedArgs := c.argParser(args[1:])
+			parsedArgs := c.argParser(args[0:])
 
 			cmd.Execute(&CmdResponse{
 				Command: cmd,
@@ -69,6 +69,8 @@ func (c *Config) createCommandList() {
 
 func (c *Config) argParser(args []string) map[string]interface{} {
 	output := make(map[string]interface{})
+
+	fmt.Println(args)
 
 	output["args"] = []string{}
 
@@ -105,6 +107,12 @@ func (c *Config) argParser(args []string) map[string]interface{} {
 
 					output["args"] = args
 				}
+			} else {
+				args := output["args"].([]string)
+
+				args = append(args, arg)
+
+				output["args"] = args
 			}
 		}
 	}
