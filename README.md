@@ -22,6 +22,7 @@ func main() {
             Name:        "test",
             Description: "Hello world test example!",
             Flags:       []string{"isbool"},
+            Aliases:     []string{"t"},
             Execute:     func(res *types.CmdResponse) {
                 fmt.Println("Hello world!")
             },

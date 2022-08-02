@@ -9,7 +9,7 @@ import (
 const (
 	MAIN_TEMPLATE string = "Welcome to {AppName}! That's a command list. Type 'help <command name>' to get help with any command.\n{CmdList}"
 	CMD_LIST      string = "{CmdName} |> {CmdDescription}"
-	CMD_HELP      string = "{CmdName} | Info\n{CmdDescription}\n{CmdAliases}"
+	CMD_HELP      string = "{CmdName} | Info\nDescription |> {CmdDescription}\nFlags |> {CmdFlags}\nAliases |> {CmdAliases}"
 )
 
 type Config struct {
@@ -28,7 +28,34 @@ func (c *Config) Run() {
 		Name:        "help",
 		Description: "Basic helper command where you can get information about commands.",
 		Execute: func(res *CmdResponse) {
-			c.createCommandList()
+			args := res.Args["args"].([]string)
+
+			if len(args) > 0 {
+				cname := args[0]
+
+				for i, cmd := range c.commands {
+					if cmd.Name == cname {
+						message := strings.Replace(CMD_HELP, "{CmdName}", cname, -1)
+						message = strings.Replace(message, "{CmdDescription}", cmd.Description, -1)
+
+						flags := []string{}
+
+						for _, flag := range cmd.Flags {
+							flags = append(flags, fmt.Sprintf("--%s", flag))
+						}
+
+						message = strings.Replace(message, "{CmdFlags}", strings.Join(flags[:], ", "), -1)
+						message = strings.Replace(message, "{CmdAliases}", strings.Join(cmd.Aliases[:], ", "), -1)
+
+						fmt.Println(message)
+						break
+					} else if i == len(c.commands)-1 {
+						c.createCommandList()
+					}
+				}
+			} else {
+				c.createCommandList()
+			}
 		},
 	})
 
@@ -38,15 +65,15 @@ func (c *Config) Run() {
 		return
 	}
 
-	for _, cmd := range c.commands {
-		if cmd.Name == args[0] {
-			parsedArgs := c.argParser(args[0:])
-
+	for i, cmd := range c.commands {
+		if cmd.Name == args[0] || *cmd.isValidAliase(args[0]) {
 			cmd.Execute(&CmdResponse{
 				Command: cmd,
-				Args:    parsedArgs,
+				Args:    cmd.argParser(args[1:]),
 			})
 			break
+		} else if i == len(c.commands)-1 {
+			c.createCommandList()
 		}
 	}
 }
@@ -65,57 +92,4 @@ func (c *Config) createCommandList() {
 	logmsg = strings.Replace(logmsg, "{CmdList}", strings.Join(cmds, "\n"), -1)
 
 	fmt.Println(logmsg)
-}
-
-func (c *Config) argParser(args []string) map[string]interface{} {
-	output := make(map[string]interface{})
-
-	fmt.Println(args)
-
-	output["args"] = []string{}
-
-	for ind, arg := range args {
-		if strings.Contains(arg, "--") {
-			vals := strings.Split(arg, "--")
-
-			if strings.Contains(vals[1], "=") {
-				parsed := strings.Split(vals[1], "=")
-
-				output[parsed[0]] = parsed[1]
-			} else {
-				output[vals[1]] = args[ind+1]
-			}
-		} else if strings.Contains(arg, "-") {
-			vals := strings.Split(arg, "-")
-
-			if strings.Contains(vals[1], "=") {
-				parsed := strings.Split(vals[1], "=")
-
-				output[parsed[0]] = parsed[1]
-			} else {
-				output[vals[1]] = args[ind+1]
-			}
-		} else {
-			if (ind - 1) >= 0 {
-				cont1 := strings.Contains(args[ind-1], "--")
-				cont2 := strings.Contains(args[ind-1], "-")
-
-				if !cont1 || !cont2 || ((cont1 || cont2) && strings.Contains(args[ind-1], "=")) {
-					args := output["args"].([]string)
-
-					args = append(args, arg)
-
-					output["args"] = args
-				}
-			} else {
-				args := output["args"].([]string)
-
-				args = append(args, arg)
-
-				output["args"] = args
-			}
-		}
-	}
-
-	return output
 }
