@@ -9,5 +9,5 @@ type Command struct {
 
 type CmdResponse struct {
 	Command Command
-	Args    []string
+	Args    map[string]interface{}
 }
