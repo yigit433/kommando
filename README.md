@@ -1,5 +1,5 @@
 ## Kommando [![Go Report Card](https://goreportcard.com/badge/github.com/yigit433/kommando)](https://goreportcard.com/report/github.com/yigit433/kommando)
-Simple and usable cli tool for go lang.
+Simple and usable cli tool for golang.
 ### Installation
 `go get github.com/yigit433/kommando`
 ### Example
