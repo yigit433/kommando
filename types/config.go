@@ -40,9 +40,11 @@ func (c *Config) Run() {
 
 	for _, cmd := range c.commands {
 		if cmd.Name == args[0] {
+			parsedArgs := c.argParser(args[1:])
+
 			cmd.Execute(&CmdResponse{
 				Command: cmd,
-				Args:    args,
+				Args:    parsedArgs,
 			})
 			break
 		}
@@ -63,4 +65,49 @@ func (c *Config) createCommandList() {
 	logmsg = strings.Replace(logmsg, "{CmdList}", strings.Join(cmds, "\n"), -1)
 
 	fmt.Println(logmsg)
+}
+
+func (c *Config) argParser(args []string) map[string]interface{} {
+	output := make(map[string]interface{})
+
+	output["args"] = []string{}
+
+	for ind, arg := range args {
+		if strings.Contains(arg, "--") {
+			vals := strings.Split(arg, "--")
+
+			if strings.Contains(vals[1], "=") {
+				parsed := strings.Split(vals[1], "=")
+
+				output[parsed[0]] = parsed[1]
+			} else {
+				output[vals[1]] = args[ind+1]
+			}
+		} else if strings.Contains(arg, "-") {
+			vals := strings.Split(arg, "-")
+
+			if strings.Contains(vals[1], "=") {
+				parsed := strings.Split(vals[1], "=")
+
+				output[parsed[0]] = parsed[1]
+			} else {
+				output[vals[1]] = args[ind+1]
+			}
+		} else {
+			if (ind - 1) >= 0 {
+				cont1 := strings.Contains(args[ind-1], "--")
+				cont2 := strings.Contains(args[ind-1], "-")
+
+				if !cont1 || !cont2 || ((cont1 || cont2) && strings.Contains(args[ind-1], "=")) {
+					args := output["args"].([]string)
+
+					args = append(args, arg)
+
+					output["args"] = args
+				}
+			}
+		}
+	}
+
+	return output
 }

@@ -3,6 +3,7 @@ package types
 type Command struct {
 	Name        string
 	Description string
+	Flags       []string
 	Execute     func(res *CmdResponse)
 }
 

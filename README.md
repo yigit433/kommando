@@ -19,9 +19,10 @@ func main() {
 
     app.AddCommand(
         &types.Command{
-            Name: "test",
+            Name:        "test",
             Description: "Hello world test example!",
-            Execute: func(res *types.CmdResponse) {
+            Flags:       []string{"isbool"}
+            Execute:     func(res *types.CmdResponse) {
                 fmt.Println("Hello world!")
             },
         },
