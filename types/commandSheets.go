@@ -1,8 +1,8 @@
 package types
 
 import (
-	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -43,31 +43,39 @@ func (c *Command) isValidAliase(aliase string) *bool {
 func (c *Command) isValidFlag(fname string, fvalue interface{}) *bool {
 	var output bool = false
 
-	for i, flag := range c.Flags {
-		if flag.Name == fname && reflect.TypeOf(fvalue).Name() == flag.ValueType {
-			output = true
-			break
-		} else if !output && i == len(c.Flags)-1 {
-			c.createFlagList()
+	for _, flag := range c.Flags {
+		if flag.Name == fname {
+			if flag.ValueType == "bool" {
+				_, err := strconv.ParseBool(fvalue.(string))
+				if err != nil {
+					panic(err)
+					break
+				}
+
+				output = true
+			} else if flag.ValueType == "int" {
+				_, err := strconv.ParseInt(fvalue.(string), 10, 64)
+				if err != nil {
+					panic(err)
+					break
+				}
+
+				output = true
+			} else if flag.ValueType == "float" {
+				_, err := strconv.ParseFloat(fvalue.(string), 64)
+				if err != nil {
+					panic(err)
+					break
+				}
+
+				output = true
+			} else if reflect.TypeOf(fvalue).Name() == "string" {
+				output = true
+			}
 		}
 	}
 
 	return &output
-}
-
-func (c *Command) createFlagList() {
-	list := []string{}
-
-	for _, flag := range c.Flags {
-		usage := fmt.Sprintf("--%s", flag.Name)
-		msg := strings.Replace(CMD_FLAG, "{FlagUsage}", usage, -1)
-		msg = strings.Replace(msg, "{FlagType}", flag.ValueType, -1)
-		msg = strings.Replace(msg, "{FlagDescription}", flag.Description, -1)
-
-		list = append(list, msg)
-	}
-
-	fmt.Println(strings.Join(list, "\n"))
 }
 
 func (c *Command) argParser(args []string) map[string]interface{} {
@@ -118,6 +126,16 @@ func (c *Command) argParser(args []string) map[string]interface{} {
 				args = append(args, arg)
 
 				output["args"] = args
+			}
+		}
+	}
+
+	if len(output) >= 1 {
+		for _, flags := range c.Flags {
+			_, ok := output[flags.Name]
+
+			if *flags.Required && !ok {
+				panic("Required flag not specified!")
 			}
 		}
 	}
