@@ -18,7 +18,14 @@ type Config struct {
 }
 
 func (c *Config) AddCommand(cmd *Command) {
-	c.commands = append(c.commands, *cmd)
+	for i, c := range c.commands {
+		if c.Name == cmd.Name {
+			panic("There is a command with the name you are trying to add.")
+			break
+		} else if i == len(c.commands)-1 {
+			c.commands = append(c.commands, *cmd)
+		}
+	}
 }
 
 func (c *Config) Run() {
