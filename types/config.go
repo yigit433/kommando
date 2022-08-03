@@ -10,6 +10,7 @@ const (
 	MAIN_TEMPLATE string = "Welcome to {AppName}! That's a command list. Type 'help <command name>' to get help with any command.\n{CmdList}"
 	CMD_LIST      string = "{CmdName} |> {CmdDescription}"
 	CMD_HELP      string = "{CmdName} | Info\nDescription |> {CmdDescription}\nFlags |> {CmdFlags}\nAliases |> {CmdAliases}"
+	CMD_FLAG      string = "{FlagUsage} |{FlagType}> {FlagDescription}"
 )
 
 type Config struct {
@@ -52,7 +53,7 @@ func (c *Config) Run() {
 						flags := []string{}
 
 						for _, flag := range cmd.Flags {
-							flags = append(flags, fmt.Sprintf("--%s", flag))
+							flags = append(flags, fmt.Sprintf("--%s", flag.Name))
 						}
 
 						message = strings.Replace(message, "{CmdFlags}", strings.Join(flags[:], ", "), -1)

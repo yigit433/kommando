@@ -21,7 +21,9 @@ func main() {
         &types.Command{
             Name:        "test",
             Description: "Hello world test example!",
-            Flags:       []string{"isbool"},
+            Flags:       []types.Flag{
+                types.Flag{false, "isbool", "description..", "bool"},
+            },
             Aliases:     []string{"t"},
             Execute:     func(res *types.CmdResponse) {
                 fmt.Println("Hello world!")
