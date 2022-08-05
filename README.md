@@ -22,7 +22,7 @@ func main() {
             Name:        "test",
             Description: "Hello world test example!",
             Flags:       []types.Flag{
-                types.Flag{false, "isbool", "description..", "bool"},
+                types.Flag{&[]bool{false}[0], "isbool", "description..", "bool"},
             },
             Aliases:     []string{"t"},
             Execute:     func(res *types.CmdResponse) {
