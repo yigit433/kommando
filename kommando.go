@@ -16,6 +16,7 @@ type App struct {
 	name        string
 	description string
 	commands    []*Command
+	globalFlags []Flag
 	output      io.Writer
 	helpAdded   bool
 }
@@ -35,6 +36,15 @@ func WithDescription(desc string) Option {
 func WithOutput(w io.Writer) Option {
 	return func(a *App) {
 		a.output = w
+	}
+}
+
+// WithGlobalFlags sets flags that are available to all commands.
+// Global flags are merged with command-specific flags during parsing.
+// If a command defines a flag with the same name, the command flag takes precedence.
+func WithGlobalFlags(flags ...Flag) Option {
+	return func(a *App) {
+		a.globalFlags = flags
 	}
 }
 
@@ -119,7 +129,10 @@ func (a *App) Run(args []string) error {
 		return nil
 	}
 
-	positional, flags, err := parseArgs(cmd, cmdArgs)
+	// Merge global flags with command flags. Command flags take precedence.
+	mergedCmd := a.mergeGlobalFlags(cmd)
+
+	positional, flags, err := parseArgs(mergedCmd, cmdArgs)
 	if err != nil {
 		return err
 	}
@@ -184,6 +197,23 @@ func (a *App) printCommandList() {
 	}
 }
 
+// mergeGlobalFlags returns a shallow copy of cmd with global flags appended,
+// skipping any global flag whose name collides with a command-level flag.
+func (a *App) mergeGlobalFlags(cmd *Command) *Command {
+	if len(a.globalFlags) == 0 {
+		return cmd
+	}
+	merged := *cmd
+	merged.Flags = make([]Flag, len(cmd.Flags))
+	copy(merged.Flags, cmd.Flags)
+	for _, gf := range a.globalFlags {
+		if findFlag(cmd, gf.Name) == nil {
+			merged.Flags = append(merged.Flags, gf)
+		}
+	}
+	return &merged
+}
+
 // printCommandHelp writes detailed help for a single command.
 func (a *App) printCommandHelp(cmd *Command) {
 	fmt.Fprintf(a.output, "%s - %s\n", cmd.Name, cmd.Description)
@@ -201,16 +231,30 @@ func (a *App) printCommandHelp(cmd *Command) {
 
 	if len(cmd.Flags) > 0 {
 		fmt.Fprintln(a.output, "Flags:")
-		for _, f := range cmd.Flags {
-			req := ""
-			if f.Required {
-				req = " (required)"
-			}
-			flagLabel := fmt.Sprintf("--%s", f.Name)
-			if f.Short != 0 {
-				flagLabel = fmt.Sprintf("-%c, --%s", f.Short, f.Name)
-			}
-			fmt.Fprintf(a.output, "  %s <%s>\t%s%s\n", flagLabel, f.Type, f.Description, req)
+		a.printFlagList(cmd.Flags)
+	}
+
+	if len(a.globalFlags) > 0 {
+		fmt.Fprintln(a.output, "Global Flags:")
+		a.printFlagList(a.globalFlags)
+	}
+}
+
+// printFlagList writes a formatted list of flags to the output.
+func (a *App) printFlagList(flags []Flag) {
+	for _, f := range flags {
+		req := ""
+		if f.Required {
+			req = " (required)"
 		}
+		env := ""
+		if f.Env != "" {
+			env = fmt.Sprintf(" [env: %s]", f.Env)
+		}
+		flagLabel := fmt.Sprintf("--%s", f.Name)
+		if f.Short != 0 {
+			flagLabel = fmt.Sprintf("-%c, --%s", f.Short, f.Name)
+		}
+		fmt.Fprintf(a.output, "  %s <%s>\t%s%s%s\n", flagLabel, f.Type, f.Description, req, env)
 	}
 }

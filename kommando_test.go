@@ -1053,3 +1053,311 @@ func TestSubCommands(t *testing.T) {
 		}
 	})
 }
+
+func TestGlobalFlags(t *testing.T) {
+	t.Run("global flag available in command", func(t *testing.T) {
+		var buf bytes.Buffer
+		app := New("myapp",
+			WithOutput(&buf),
+			WithGlobalFlags(Flag{Name: "verbose", Short: 'v', Type: FlagBool}),
+		)
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Execute: func(ctx *Context) error {
+				v, _ := ctx.Bool("verbose")
+				if v {
+					ctx.Output().Write([]byte("verbose"))
+				} else {
+					ctx.Output().Write([]byte("quiet"))
+				}
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"test", "--verbose"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "verbose" {
+			t.Fatalf("expected %q, got %q", "verbose", buf.String())
+		}
+	})
+
+	t.Run("global flag with short", func(t *testing.T) {
+		var buf bytes.Buffer
+		app := New("myapp",
+			WithOutput(&buf),
+			WithGlobalFlags(Flag{Name: "verbose", Short: 'v', Type: FlagBool}),
+		)
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Execute: func(ctx *Context) error {
+				v, _ := ctx.Bool("verbose")
+				if v {
+					ctx.Output().Write([]byte("verbose"))
+				}
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"test", "-v"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "verbose" {
+			t.Fatalf("expected %q, got %q", "verbose", buf.String())
+		}
+	})
+
+	t.Run("command flag overrides global flag", func(t *testing.T) {
+		var buf bytes.Buffer
+		app := New("myapp",
+			WithOutput(&buf),
+			WithGlobalFlags(Flag{Name: "output", Type: FlagString, Default: "global.txt"}),
+		)
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "output", Type: FlagString, Default: "local.txt"},
+			},
+			Execute: func(ctx *Context) error {
+				v, _ := ctx.String("output")
+				ctx.Output().Write([]byte(v))
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"test"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "local.txt" {
+			t.Fatalf("expected %q, got %q", "local.txt", buf.String())
+		}
+	})
+
+	t.Run("global flags shown in help", func(t *testing.T) {
+		var buf bytes.Buffer
+		app := New("myapp",
+			WithOutput(&buf),
+			WithGlobalFlags(Flag{Name: "verbose", Short: 'v', Type: FlagBool, Description: "enable verbose"}),
+		)
+		_ = app.AddCommand(&Command{
+			Name:        "test",
+			Description: "a test",
+			Execute:     func(ctx *Context) error { return nil },
+		})
+
+		_ = app.Run([]string{"help", "test"})
+		output := buf.String()
+		if !strings.Contains(output, "Global Flags:") {
+			t.Fatalf("expected 'Global Flags:' section, got:\n%s", output)
+		}
+		if !strings.Contains(output, "verbose") {
+			t.Fatalf("expected global flag 'verbose' in help, got:\n%s", output)
+		}
+	})
+
+	t.Run("global flag in subcommand", func(t *testing.T) {
+		var buf bytes.Buffer
+		app := New("myapp",
+			WithOutput(&buf),
+			WithGlobalFlags(Flag{Name: "config", Short: 'c', Type: FlagString, Default: "app.yaml"}),
+		)
+		_ = app.AddCommand(&Command{
+			Name: "server",
+			SubCommands: []*Command{
+				{
+					Name: "start",
+					Execute: func(ctx *Context) error {
+						v, _ := ctx.String("config")
+						ctx.Output().Write([]byte(v))
+						return nil
+					},
+				},
+			},
+		})
+
+		err := app.Run([]string{"server", "start", "-c", "prod.yaml"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "prod.yaml" {
+			t.Fatalf("expected %q, got %q", "prod.yaml", buf.String())
+		}
+	})
+}
+
+func TestEnvBinding(t *testing.T) {
+	t.Run("flag from env", func(t *testing.T) {
+		t.Setenv("APP_PORT", "9090")
+
+		var buf bytes.Buffer
+		app := New("myapp", WithOutput(&buf))
+		_ = app.AddCommand(&Command{
+			Name: "serve",
+			Flags: []Flag{
+				{Name: "port", Type: FlagInt, Env: "APP_PORT"},
+			},
+			Execute: func(ctx *Context) error {
+				p, _ := ctx.Int("port")
+				fmt.Fprintf(ctx.Output(), "port:%d", p)
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"serve"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "port:9090" {
+			t.Fatalf("expected %q, got %q", "port:9090", buf.String())
+		}
+	})
+
+	t.Run("cli flag overrides env", func(t *testing.T) {
+		t.Setenv("APP_PORT", "9090")
+
+		var buf bytes.Buffer
+		app := New("myapp", WithOutput(&buf))
+		_ = app.AddCommand(&Command{
+			Name: "serve",
+			Flags: []Flag{
+				{Name: "port", Type: FlagInt, Env: "APP_PORT"},
+			},
+			Execute: func(ctx *Context) error {
+				p, _ := ctx.Int("port")
+				fmt.Fprintf(ctx.Output(), "port:%d", p)
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"serve", "--port", "3000"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "port:3000" {
+			t.Fatalf("expected %q, got %q", "port:3000", buf.String())
+		}
+	})
+
+	t.Run("env overrides default", func(t *testing.T) {
+		t.Setenv("APP_HOST", "production.local")
+
+		var buf bytes.Buffer
+		app := New("myapp", WithOutput(&buf))
+		_ = app.AddCommand(&Command{
+			Name: "serve",
+			Flags: []Flag{
+				{Name: "host", Type: FlagString, Default: "localhost", Env: "APP_HOST"},
+			},
+			Execute: func(ctx *Context) error {
+				h, _ := ctx.String("host")
+				ctx.Output().Write([]byte(h))
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"serve"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "production.local" {
+			t.Fatalf("expected %q, got %q", "production.local", buf.String())
+		}
+	})
+
+	t.Run("invalid env value returns error", func(t *testing.T) {
+		t.Setenv("APP_COUNT", "notanumber")
+
+		var buf bytes.Buffer
+		app := New("myapp", WithOutput(&buf))
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "count", Type: FlagInt, Env: "APP_COUNT"},
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"test"})
+		if err == nil {
+			t.Fatal("expected error for invalid env value")
+		}
+		if !errors.Is(err, ErrInvalidFlagValue) {
+			t.Fatalf("expected ErrInvalidFlagValue, got %v", err)
+		}
+	})
+
+	t.Run("env satisfies required flag", func(t *testing.T) {
+		t.Setenv("APP_TOKEN", "secret123")
+
+		var buf bytes.Buffer
+		app := New("myapp", WithOutput(&buf))
+		_ = app.AddCommand(&Command{
+			Name: "deploy",
+			Flags: []Flag{
+				{Name: "token", Type: FlagString, Required: true, Env: "APP_TOKEN"},
+			},
+			Execute: func(ctx *Context) error {
+				v, _ := ctx.String("token")
+				ctx.Output().Write([]byte(v))
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"deploy"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "secret123" {
+			t.Fatalf("expected %q, got %q", "secret123", buf.String())
+		}
+	})
+
+	t.Run("env shown in help", func(t *testing.T) {
+		var buf bytes.Buffer
+		app := New("myapp", WithOutput(&buf))
+		_ = app.AddCommand(&Command{
+			Name: "serve",
+			Flags: []Flag{
+				{Name: "port", Type: FlagInt, Env: "APP_PORT", Description: "listen port"},
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		_ = app.Run([]string{"help", "serve"})
+		output := buf.String()
+		if !strings.Contains(output, "[env: APP_PORT]") {
+			t.Fatalf("expected env info in help, got:\n%s", output)
+		}
+	})
+
+	t.Run("global flag with env", func(t *testing.T) {
+		t.Setenv("APP_DEBUG", "true")
+
+		var buf bytes.Buffer
+		app := New("myapp",
+			WithOutput(&buf),
+			WithGlobalFlags(Flag{Name: "debug", Type: FlagBool, Env: "APP_DEBUG"}),
+		)
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Execute: func(ctx *Context) error {
+				d, _ := ctx.Bool("debug")
+				if d {
+					ctx.Output().Write([]byte("debug"))
+				}
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"test"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "debug" {
+			t.Fatalf("expected %q, got %q", "debug", buf.String())
+		}
+	})
+}

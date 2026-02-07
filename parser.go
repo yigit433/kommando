@@ -2,6 +2,7 @@ package kommando
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -37,6 +38,18 @@ func parseArgs(cmd *Command, raw []string) ([]string, map[string]string, error) 
 		}
 		flags[name] = value
 		i += consumed
+	}
+
+	// Apply environment variables for flags not provided on the command line.
+	for _, f := range cmd.Flags {
+		if _, ok := flags[f.Name]; !ok && f.Env != "" {
+			if envVal, exists := os.LookupEnv(f.Env); exists {
+				if err := validateFlagValue(&f, envVal); err != nil {
+					return nil, nil, err
+				}
+				flags[f.Name] = envVal
+			}
+		}
 	}
 
 	// Apply defaults for flags not provided.

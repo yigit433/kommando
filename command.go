@@ -43,6 +43,10 @@ type Flag struct {
 	Required bool
 	// Default is the default value used when the flag is not provided.
 	Default string
+	// Env is an optional environment variable name. When set and the flag
+	// is not provided on the command line, the value is read from this
+	// environment variable (checked after Default).
+	Env string
 }
 
 // Command represents a CLI command with its metadata and execution logic.
