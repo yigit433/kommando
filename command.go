@@ -55,6 +55,10 @@ type Command struct {
 	Flags []Flag
 	// Aliases are alternative names for the command.
 	Aliases []string
+	// SubCommands defines nested commands (e.g. "server start", "server stop").
+	// When SubCommands is set and the first positional argument matches a
+	// subcommand, that subcommand is executed instead of Execute.
+	SubCommands []*Command
 	// Execute is the function called when the command is invoked.
 	// It receives a Context containing parsed flags and arguments.
 	Execute func(ctx *Context) error
@@ -68,4 +72,14 @@ func (c *Command) hasAlias(name string) bool {
 		}
 	}
 	return false
+}
+
+// findSubCommand looks up a subcommand by name or alias.
+func (c *Command) findSubCommand(name string) *Command {
+	for _, sub := range c.SubCommands {
+		if sub.Name == name || sub.hasAlias(name) {
+			return sub
+		}
+	}
+	return nil
 }

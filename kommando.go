@@ -86,8 +86,24 @@ func (a *App) Run(args []string) error {
 		return fmt.Errorf("%w: %s", ErrCommandNotFound, name)
 	}
 
-	// If any remaining arg is --help / -h, show command help instead of executing.
-	for _, arg := range args[1:] {
+	// Resolve subcommands: walk down the command tree as long as the
+	// next positional argument matches a subcommand.
+	cmdArgs := args[1:]
+	for len(cmd.SubCommands) > 0 && len(cmdArgs) > 0 {
+		// Skip if next arg looks like a flag.
+		if strings.HasPrefix(cmdArgs[0], "-") {
+			break
+		}
+		sub := cmd.findSubCommand(cmdArgs[0])
+		if sub == nil {
+			break
+		}
+		cmd = sub
+		cmdArgs = cmdArgs[1:]
+	}
+
+	// If any remaining arg is --help / -h, show help for the resolved command.
+	for _, arg := range cmdArgs {
 		if arg == "--help" || arg == "-h" {
 			a.printCommandHelp(cmd)
 			return nil
@@ -98,7 +114,12 @@ func (a *App) Run(args []string) error {
 		}
 	}
 
-	positional, flags, err := parseArgs(cmd, args[1:])
+	if cmd.Execute == nil {
+		a.printCommandHelp(cmd)
+		return nil
+	}
+
+	positional, flags, err := parseArgs(cmd, cmdArgs)
 	if err != nil {
 		return err
 	}
@@ -169,6 +190,13 @@ func (a *App) printCommandHelp(cmd *Command) {
 
 	if len(cmd.Aliases) > 0 {
 		fmt.Fprintf(a.output, "Aliases: %s\n", strings.Join(cmd.Aliases, ", "))
+	}
+
+	if len(cmd.SubCommands) > 0 {
+		fmt.Fprintln(a.output, "Commands:")
+		for _, sub := range cmd.SubCommands {
+			fmt.Fprintf(a.output, "  %-16s %s\n", sub.Name, sub.Description)
+		}
 	}
 
 	if len(cmd.Flags) > 0 {

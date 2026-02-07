@@ -3,6 +3,7 @@ package kommando
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -814,4 +815,241 @@ func TestShortFlagHelpOutput(t *testing.T) {
 	if strings.Contains(output, "-, --output") {
 		t.Fatalf("flag without short should not have '-, ' prefix, got:\n%s", output)
 	}
+}
+
+func TestSubCommands(t *testing.T) {
+	t.Run("basic subcommand execution", func(t *testing.T) {
+		app, buf := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:        "server",
+			Description: "Server management",
+			SubCommands: []*Command{
+				{
+					Name:        "start",
+					Description: "Start the server",
+					Flags: []Flag{
+						{Name: "port", Short: 'p', Type: FlagInt, Default: "8080"},
+					},
+					Execute: func(ctx *Context) error {
+						port, _ := ctx.Int("port")
+						fmt.Fprintf(ctx.Output(), "started:%d", port)
+						return nil
+					},
+				},
+				{
+					Name:        "stop",
+					Description: "Stop the server",
+					Execute: func(ctx *Context) error {
+						ctx.Output().Write([]byte("stopped"))
+						return nil
+					},
+				},
+			},
+		})
+
+		err := app.Run([]string{"server", "start", "--port", "3000"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "started:3000" {
+			t.Fatalf("expected %q, got %q", "started:3000", buf.String())
+		}
+	})
+
+	t.Run("subcommand with default flag", func(t *testing.T) {
+		app, buf := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name: "server",
+			SubCommands: []*Command{
+				{
+					Name: "start",
+					Flags: []Flag{
+						{Name: "port", Type: FlagInt, Default: "8080"},
+					},
+					Execute: func(ctx *Context) error {
+						port, _ := ctx.Int("port")
+						fmt.Fprintf(ctx.Output(), "port:%d", port)
+						return nil
+					},
+				},
+			},
+		})
+
+		err := app.Run([]string{"server", "start"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "port:8080" {
+			t.Fatalf("expected %q, got %q", "port:8080", buf.String())
+		}
+	})
+
+	t.Run("subcommand with alias", func(t *testing.T) {
+		app, buf := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name: "server",
+			SubCommands: []*Command{
+				{
+					Name:    "start",
+					Aliases: []string{"s"},
+					Execute: func(ctx *Context) error {
+						ctx.Output().Write([]byte("ok"))
+						return nil
+					},
+				},
+			},
+		})
+
+		err := app.Run([]string{"server", "s"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "ok" {
+			t.Fatalf("expected %q, got %q", "ok", buf.String())
+		}
+	})
+
+	t.Run("parent without execute shows help", func(t *testing.T) {
+		app, buf := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:        "server",
+			Description: "Server management",
+			SubCommands: []*Command{
+				{Name: "start", Description: "Start the server", Execute: func(ctx *Context) error { return nil }},
+				{Name: "stop", Description: "Stop the server", Execute: func(ctx *Context) error { return nil }},
+			},
+		})
+
+		err := app.Run([]string{"server"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		output := buf.String()
+		if !strings.Contains(output, "start") || !strings.Contains(output, "stop") {
+			t.Fatalf("expected subcommand list in help, got:\n%s", output)
+		}
+	})
+
+	t.Run("unknown subcommand falls to parent", func(t *testing.T) {
+		executed := false
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name: "server",
+			SubCommands: []*Command{
+				{Name: "start", Execute: func(ctx *Context) error { return nil }},
+			},
+			Execute: func(ctx *Context) error {
+				executed = true
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"server", "unknown"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !executed {
+			t.Fatal("parent Execute should have been called")
+		}
+	})
+
+	t.Run("subcommand --help", func(t *testing.T) {
+		app, buf := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name: "server",
+			SubCommands: []*Command{
+				{
+					Name:        "start",
+					Description: "Start it",
+					Flags:       []Flag{{Name: "port", Type: FlagInt}},
+					Execute:     func(ctx *Context) error { return nil },
+				},
+			},
+		})
+
+		err := app.Run([]string{"server", "start", "--help"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		output := buf.String()
+		if !strings.Contains(output, "start") || !strings.Contains(output, "port") {
+			t.Fatalf("expected subcommand help, got:\n%s", output)
+		}
+	})
+
+	t.Run("nested subcommands", func(t *testing.T) {
+		app, buf := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name: "db",
+			SubCommands: []*Command{
+				{
+					Name: "migrate",
+					SubCommands: []*Command{
+						{
+							Name: "up",
+							Execute: func(ctx *Context) error {
+								ctx.Output().Write([]byte("migrated"))
+								return nil
+							},
+						},
+					},
+				},
+			},
+		})
+
+		err := app.Run([]string{"db", "migrate", "up"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if buf.String() != "migrated" {
+			t.Fatalf("expected %q, got %q", "migrated", buf.String())
+		}
+	})
+
+	t.Run("help command shows subcommands", func(t *testing.T) {
+		app, buf := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:        "server",
+			Description: "Server ops",
+			SubCommands: []*Command{
+				{Name: "start", Description: "Start the server"},
+				{Name: "stop", Description: "Stop the server"},
+			},
+		})
+
+		err := app.Run([]string{"help", "server"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		output := buf.String()
+		if !strings.Contains(output, "Commands:") {
+			t.Fatalf("expected 'Commands:' section, got:\n%s", output)
+		}
+		if !strings.Contains(output, "start") || !strings.Contains(output, "stop") {
+			t.Fatalf("expected subcommands listed, got:\n%s", output)
+		}
+	})
+
+	t.Run("subcommand context has correct command", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name: "server",
+			SubCommands: []*Command{
+				{
+					Name: "start",
+					Execute: func(ctx *Context) error {
+						if ctx.Command().Name != "start" {
+							t.Fatalf("expected command name %q, got %q", "start", ctx.Command().Name)
+						}
+						return nil
+					},
+				},
+			},
+		})
+
+		err := app.Run([]string{"server", "start"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
