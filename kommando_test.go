@@ -468,15 +468,16 @@ func TestHelpNotDuplicated(t *testing.T) {
 		Execute: func(ctx *Context) error { return nil },
 	})
 
-	// Run multiple times - help should only appear once.
+	// Run multiple times - help command should only appear once in list.
 	_ = app.Run([]string{})
 	buf.Reset()
 	_ = app.Run([]string{})
 
 	output := buf.String()
-	count := strings.Count(output, "help")
+	// Count lines that start with the help command entry (indented name).
+	count := strings.Count(output, "  help")
 	if count != 1 {
-		t.Fatalf("expected help to appear once in command list, appeared %d times:\n%s", count, output)
+		t.Fatalf("expected help command entry to appear once, appeared %d times:\n%s", count, output)
 	}
 }
 
