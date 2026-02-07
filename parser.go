@@ -59,7 +59,8 @@ func parseArgs(cmd *Command, raw []string) ([]string, map[string]string, error) 
 }
 
 // parseFlag parses a single flag starting at raw[i].
-// It returns the flag name, value, number of consumed arguments, and any error.
+// It returns the canonical flag name, value, number of consumed arguments, and any error.
+// Short flags (e.g. -v) are resolved to their long name (e.g. "verbose").
 func parseFlag(cmd *Command, raw []string, i int) (string, string, int, error) {
 	arg := raw[i]
 
@@ -78,20 +79,22 @@ func parseFlag(cmd *Command, raw []string, i int) (string, string, int, error) {
 		if err := validateFlagValue(f, flagValue); err != nil {
 			return "", "", 0, err
 		}
-		return flagName, flagValue, 1, nil
+		return f.Name, flagValue, 1, nil
 	}
 
-	// Handle boolean flags that don't require a value.
+	// Resolve short/long name via findFlag.
 	f := findFlag(cmd, name)
+
+	// Handle boolean flags that don't require a value.
 	if f != nil && f.Type == FlagBool {
 		// If next arg looks like a bool value, consume it.
 		if i+1 < len(raw) {
 			next := strings.ToLower(raw[i+1])
 			if next == "true" || next == "false" || next == "1" || next == "0" {
-				return name, raw[i+1], 2, nil
+				return f.Name, raw[i+1], 2, nil
 			}
 		}
-		return name, "true", 1, nil
+		return f.Name, "true", 1, nil
 	}
 
 	// Handle --flag value syntax: next arg is the value.
@@ -104,14 +107,18 @@ func parseFlag(cmd *Command, raw []string, i int) (string, string, int, error) {
 		if err := validateFlagValue(f, value); err != nil {
 			return "", "", 0, err
 		}
+		return f.Name, value, 2, nil
 	}
 	return name, value, 2, nil
 }
 
-// findFlag looks up a flag definition by name in the command.
+// findFlag looks up a flag definition by name or short alias in the command.
 func findFlag(cmd *Command, name string) *Flag {
 	for idx := range cmd.Flags {
 		if cmd.Flags[idx].Name == name {
+			return &cmd.Flags[idx]
+		}
+		if cmd.Flags[idx].Short != 0 && len(name) == 1 && rune(name[0]) == cmd.Flags[idx].Short {
 			return &cmd.Flags[idx]
 		}
 	}

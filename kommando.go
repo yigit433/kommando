@@ -158,7 +158,11 @@ func (a *App) printCommandHelp(cmd *Command) {
 			if f.Required {
 				req = " (required)"
 			}
-			fmt.Fprintf(a.output, "  --%s <%s>\t%s%s\n", f.Name, f.Type, f.Description, req)
+			flagLabel := fmt.Sprintf("--%s", f.Name)
+			if f.Short != 0 {
+				flagLabel = fmt.Sprintf("-%c, --%s", f.Short, f.Name)
+			}
+			fmt.Fprintf(a.output, "  %s <%s>\t%s%s\n", flagLabel, f.Type, f.Description, req)
 		}
 	}
 }

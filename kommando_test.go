@@ -552,3 +552,156 @@ func TestHasAlias(t *testing.T) {
 		t.Fatal("expected hasAlias(nope) = false")
 	}
 }
+
+func TestShortFlag(t *testing.T) {
+	cmd := &Command{
+		Name: "test",
+		Flags: []Flag{
+			{Name: "verbose", Short: 'v', Type: FlagBool},
+			{Name: "output", Short: 'o', Type: FlagString},
+			{Name: "count", Short: 'n', Type: FlagInt},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		raw       []string
+		wantFlags map[string]string
+		wantArgs  []string
+		wantErr   bool
+	}{
+		{
+			name:      "short bool flag",
+			raw:       []string{"-v"},
+			wantFlags: map[string]string{"verbose": "true"},
+		},
+		{
+			name:      "short bool flag with value",
+			raw:       []string{"-v", "false"},
+			wantFlags: map[string]string{"verbose": "false"},
+		},
+		{
+			name:      "short string flag space",
+			raw:       []string{"-o", "file.txt"},
+			wantFlags: map[string]string{"output": "file.txt"},
+		},
+		{
+			name:      "short string flag equals",
+			raw:       []string{"-o=file.txt"},
+			wantFlags: map[string]string{"output": "file.txt"},
+		},
+		{
+			name:      "short int flag",
+			raw:       []string{"-n", "5"},
+			wantFlags: map[string]string{"count": "5"},
+		},
+		{
+			name:      "mixed short and long",
+			raw:       []string{"-v", "--output", "file.txt", "-n", "3"},
+			wantFlags: map[string]string{"verbose": "true", "output": "file.txt", "count": "3"},
+		},
+		{
+			name:      "short flags with positional",
+			raw:       []string{"-o", "file.txt", "arg1", "arg2"},
+			wantFlags: map[string]string{"output": "file.txt"},
+			wantArgs:  []string{"arg1", "arg2"},
+		},
+		{
+			name:    "short flag missing value",
+			raw:     []string{"-o"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args, flags, err := parseArgs(cmd, tt.raw)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			for k, want := range tt.wantFlags {
+				got, ok := flags[k]
+				if !ok {
+					t.Fatalf("flag %q: not found (flags: %v)", k, flags)
+				}
+				if got != want {
+					t.Fatalf("flag %q: expected %q, got %q", k, want, got)
+				}
+			}
+
+			if tt.wantArgs != nil {
+				if len(args) != len(tt.wantArgs) {
+					t.Fatalf("args: expected %v, got %v", tt.wantArgs, args)
+				}
+				for i, want := range tt.wantArgs {
+					if args[i] != want {
+						t.Fatalf("args[%d]: expected %q, got %q", i, want, args[i])
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestShortFlagEndToEnd(t *testing.T) {
+	app, buf := newTestApp("myapp")
+	_ = app.AddCommand(&Command{
+		Name: "greet",
+		Flags: []Flag{
+			{Name: "name", Short: 'n', Type: FlagString},
+			{Name: "loud", Short: 'l', Type: FlagBool},
+		},
+		Execute: func(ctx *Context) error {
+			name, _ := ctx.String("name")
+			loud, _ := ctx.Bool("loud")
+			msg := "Hello, " + name
+			if loud {
+				msg = strings.ToUpper(msg)
+			}
+			ctx.Output().Write([]byte(msg))
+			return nil
+		},
+	})
+
+	err := app.Run([]string{"greet", "-n", "World", "-l"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if buf.String() != "HELLO, WORLD" {
+		t.Fatalf("expected %q, got %q", "HELLO, WORLD", buf.String())
+	}
+}
+
+func TestShortFlagHelpOutput(t *testing.T) {
+	app, buf := newTestApp("myapp")
+	_ = app.AddCommand(&Command{
+		Name: "test",
+		Flags: []Flag{
+			{Name: "verbose", Short: 'v', Type: FlagBool, Description: "verbose output"},
+			{Name: "output", Type: FlagString, Description: "output file"},
+		},
+		Execute: func(ctx *Context) error { return nil },
+	})
+
+	_ = app.Run([]string{"help", "test"})
+	output := buf.String()
+
+	// Short flag should show "-v, --verbose" format.
+	if !strings.Contains(output, "-v, --verbose") {
+		t.Fatalf("expected '-v, --verbose' in help output, got:\n%s", output)
+	}
+	// Flag without short should show only "--output".
+	if !strings.Contains(output, "--output") {
+		t.Fatalf("expected '--output' in help output, got:\n%s", output)
+	}
+	if strings.Contains(output, "-, --output") {
+		t.Fatalf("flag without short should not have '-, ' prefix, got:\n%s", output)
+	}
+}

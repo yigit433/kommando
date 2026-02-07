@@ -32,6 +32,9 @@ func (ft FlagType) String() string {
 type Flag struct {
 	// Name is the flag identifier used on the command line (e.g. --name).
 	Name string
+	// Short is an optional single-character shorthand (e.g. 'v' for -v).
+	// Use 0 to indicate no short flag.
+	Short rune
 	// Description is a short explanation of the flag's purpose.
 	Description string
 	// Type determines how the flag value is parsed. Defaults to FlagString.
