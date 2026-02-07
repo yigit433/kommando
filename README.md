@@ -26,7 +26,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/yigit433/kommando"
+    "github.com/yigit433/kommando/v2"
 )
 
 func main() {
