@@ -679,6 +679,116 @@ func TestShortFlagEndToEnd(t *testing.T) {
 	}
 }
 
+func TestHelpFlag(t *testing.T) {
+	executed := false
+	makeApp := func() (*App, *bytes.Buffer) {
+		app, buf := newTestApp("myapp")
+		executed = false
+		_ = app.AddCommand(&Command{
+			Name:        "greet",
+			Description: "Say hello",
+			Aliases:     []string{"g"},
+			Flags: []Flag{
+				{Name: "name", Type: FlagString},
+			},
+			Execute: func(ctx *Context) error {
+				executed = true
+				return nil
+			},
+		})
+		return app, buf
+	}
+
+	t.Run("command --help", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.Run([]string{"greet", "--help"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if executed {
+			t.Fatal("command should not have been executed")
+		}
+		if !strings.Contains(buf.String(), "greet") || !strings.Contains(buf.String(), "Say hello") {
+			t.Fatalf("expected command help, got:\n%s", buf.String())
+		}
+	})
+
+	t.Run("command -h", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.Run([]string{"greet", "-h"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if executed {
+			t.Fatal("command should not have been executed")
+		}
+		if !strings.Contains(buf.String(), "greet") {
+			t.Fatalf("expected command help, got:\n%s", buf.String())
+		}
+	})
+
+	t.Run("--help with flags", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.Run([]string{"greet", "--name", "alice", "--help"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if executed {
+			t.Fatal("command should not have been executed")
+		}
+		if !strings.Contains(buf.String(), "greet") {
+			t.Fatalf("expected command help, got:\n%s", buf.String())
+		}
+	})
+
+	t.Run("top-level --help", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.Run([]string{"--help"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "myapp") || !strings.Contains(buf.String(), "greet") {
+			t.Fatalf("expected command list, got:\n%s", buf.String())
+		}
+	})
+
+	t.Run("top-level -h", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.Run([]string{"-h"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "myapp") {
+			t.Fatalf("expected command list, got:\n%s", buf.String())
+		}
+	})
+
+	t.Run("alias --help", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.Run([]string{"g", "--help"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if executed {
+			t.Fatal("command should not have been executed")
+		}
+		if !strings.Contains(buf.String(), "greet") {
+			t.Fatalf("expected command help, got:\n%s", buf.String())
+		}
+	})
+
+	t.Run("--help after bare -- is ignored", func(t *testing.T) {
+		app, _ := makeApp()
+		err := app.Run([]string{"greet", "--", "--help"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !executed {
+			t.Fatal("command should have been executed (--help after -- is positional)")
+		}
+	})
+}
+
 func TestShortFlagHelpOutput(t *testing.T) {
 	app, buf := newTestApp("myapp")
 	_ = app.AddCommand(&Command{

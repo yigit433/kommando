@@ -64,6 +64,8 @@ func (a *App) AddCommand(cmd *Command) error {
 
 // Run parses the given arguments and executes the matching command.
 // Pass os.Args[1:] for normal CLI usage.
+// If --help or -h appears in the arguments, help is printed instead of
+// executing the command.
 func (a *App) Run(args []string) error {
 	a.ensureHelp()
 
@@ -72,10 +74,28 @@ func (a *App) Run(args []string) error {
 		return nil
 	}
 
+	// Top-level --help / -h shows the command list.
+	if args[0] == "--help" || args[0] == "-h" {
+		a.printCommandList()
+		return nil
+	}
+
 	name := args[0]
 	cmd := a.findCommand(name)
 	if cmd == nil {
 		return fmt.Errorf("%w: %s", ErrCommandNotFound, name)
+	}
+
+	// If any remaining arg is --help / -h, show command help instead of executing.
+	for _, arg := range args[1:] {
+		if arg == "--help" || arg == "-h" {
+			a.printCommandHelp(cmd)
+			return nil
+		}
+		// Stop scanning after bare -- separator.
+		if arg == "--" {
+			break
+		}
 	}
 
 	positional, flags, err := parseArgs(cmd, args[1:])
