@@ -1361,3 +1361,146 @@ func TestEnvBinding(t *testing.T) {
 		}
 	})
 }
+
+func TestCompletion(t *testing.T) {
+	makeApp := func() (*App, *bytes.Buffer) {
+		var buf bytes.Buffer
+		app := New("myapp",
+			WithOutput(&buf),
+			WithGlobalFlags(Flag{Name: "verbose", Short: 'v', Type: FlagBool}),
+		)
+		_ = app.AddCommand(&Command{
+			Name:        "serve",
+			Description: "Start server",
+			Aliases:     []string{"s"},
+			Flags: []Flag{
+				{Name: "port", Short: 'p', Type: FlagInt, Description: "listen port"},
+			},
+			SubCommands: []*Command{
+				{Name: "start", Description: "Start the server"},
+				{Name: "stop", Description: "Stop the server"},
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+		_ = app.AddCommand(&Command{
+			Name:        "deploy",
+			Description: "Deploy app",
+			Execute:     func(ctx *Context) error { return nil },
+		})
+		return app, &buf
+	}
+
+	t.Run("bash completion", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.GenerateCompletion(buf, Bash)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		output := buf.String()
+		if !strings.Contains(output, "_myapp_completions") {
+			t.Fatalf("expected bash function name, got:\n%s", output)
+		}
+		if !strings.Contains(output, "complete -F") {
+			t.Fatalf("expected complete command, got:\n%s", output)
+		}
+		if !strings.Contains(output, "serve") || !strings.Contains(output, "deploy") {
+			t.Fatalf("expected command names, got:\n%s", output)
+		}
+		if !strings.Contains(output, "--port") {
+			t.Fatalf("expected flag names, got:\n%s", output)
+		}
+		if !strings.Contains(output, "--verbose") {
+			t.Fatalf("expected global flag, got:\n%s", output)
+		}
+	})
+
+	t.Run("zsh completion", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.GenerateCompletion(buf, Zsh)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		output := buf.String()
+		if !strings.Contains(output, "#compdef myapp") {
+			t.Fatalf("expected zsh compdef header, got:\n%s", output)
+		}
+		if !strings.Contains(output, "serve:Start server") {
+			t.Fatalf("expected command with description, got:\n%s", output)
+		}
+		if !strings.Contains(output, "start") {
+			t.Fatalf("expected subcommand, got:\n%s", output)
+		}
+	})
+
+	t.Run("fish completion", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.GenerateCompletion(buf, Fish)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		output := buf.String()
+		if !strings.Contains(output, "complete -c myapp") {
+			t.Fatalf("expected fish complete command, got:\n%s", output)
+		}
+		if !strings.Contains(output, "__fish_use_subcommand") {
+			t.Fatalf("expected fish subcommand condition, got:\n%s", output)
+		}
+		if !strings.Contains(output, "-l port") {
+			t.Fatalf("expected long flag, got:\n%s", output)
+		}
+		if !strings.Contains(output, "-s p") {
+			t.Fatalf("expected short flag, got:\n%s", output)
+		}
+	})
+
+	t.Run("powershell completion", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.GenerateCompletion(buf, PowerShell)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		output := buf.String()
+		if !strings.Contains(output, "Register-ArgumentCompleter") {
+			t.Fatalf("expected PS completer, got:\n%s", output)
+		}
+		if !strings.Contains(output, "'serve'") {
+			t.Fatalf("expected command name, got:\n%s", output)
+		}
+		if !strings.Contains(output, "'--port'") {
+			t.Fatalf("expected flag, got:\n%s", output)
+		}
+	})
+
+	t.Run("unsupported shell", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.GenerateCompletion(buf, "tcsh")
+		if err == nil {
+			t.Fatal("expected error for unsupported shell")
+		}
+		if !strings.Contains(err.Error(), "unsupported shell") {
+			t.Fatalf("expected 'unsupported shell' error, got: %v", err)
+		}
+	})
+
+	t.Run("completion command via Run", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.Run([]string{"completion", "bash"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "_myapp_completions") {
+			t.Fatalf("expected bash completion output, got:\n%s", buf.String())
+		}
+	})
+
+	t.Run("completion command no args", func(t *testing.T) {
+		app, buf := makeApp()
+		err := app.Run([]string{"completion"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !strings.Contains(buf.String(), "Usage:") {
+			t.Fatalf("expected usage message, got:\n%s", buf.String())
+		}
+	})
+}

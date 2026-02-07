@@ -147,7 +147,7 @@ func (a *App) Run(args []string) error {
 	return cmd.Execute(ctx)
 }
 
-// ensureHelp adds the built-in help command exactly once.
+// ensureHelp adds the built-in help and completion commands exactly once.
 func (a *App) ensureHelp() {
 	if a.helpAdded {
 		return
@@ -169,6 +169,19 @@ func (a *App) ensureHelp() {
 			}
 			a.printCommandList()
 			return nil
+		},
+	})
+
+	a.commands = append(a.commands, &Command{
+		Name:        "completion",
+		Description: "Generate shell completion script.",
+		Execute: func(ctx *Context) error {
+			args := ctx.Args()
+			if len(args) == 0 {
+				fmt.Fprintln(ctx.Output(), "Usage: completion <bash|zsh|fish|powershell>")
+				return nil
+			}
+			return a.GenerateCompletion(ctx.Output(), Shell(args[0]))
 		},
 	})
 }

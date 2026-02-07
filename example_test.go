@@ -18,6 +18,7 @@ func ExampleNew() {
 	// Type 'help <command>' to get help with any command.
 	//
 	//   help             Show help for a command.
+	//   completion       Generate shell completion script.
 }
 
 func ExampleApp_AddCommand() {

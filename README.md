@@ -2,13 +2,22 @@
 
 A minimalist CLI framework for Go.
 
+### Features
+
+- Typed flags with short aliases (`-p`, `--port`)
+- Nested subcommands (`app server start`)
+- Global flags and environment variable binding
+- Automatic `--help` / `-h` on every command
+- Shell completion (Bash, Zsh, Fish, PowerShell)
+- Error returns instead of panics
+
 ### Installation
 
 ```
 go get github.com/yigit433/kommando
 ```
 
-### Example
+### Quick Start
 
 ```go
 package main
@@ -21,20 +30,27 @@ import (
 )
 
 func main() {
-    app := kommando.New("myapp", kommando.WithOutput(os.Stdout))
+    app := kommando.New("myapp",
+        kommando.WithDescription("My CLI tool"),
+        kommando.WithOutput(os.Stdout),
+        kommando.WithGlobalFlags(
+            kommando.Flag{Name: "verbose", Short: 'v', Type: kommando.FlagBool, Description: "verbose output"},
+        ),
+    )
 
     app.AddCommand(&kommando.Command{
         Name:        "greet",
         Description: "Greet someone",
         Aliases:     []string{"g"},
         Flags: []kommando.Flag{
-            {Name: "loud", Description: "shout", Type: kommando.FlagBool},
-            {Name: "times", Description: "repeat N times", Type: kommando.FlagInt, Required: true},
+            {Name: "name", Short: 'n', Description: "who to greet", Type: kommando.FlagString, Default: "World"},
+            {Name: "times", Short: 't', Description: "repeat N times", Type: kommando.FlagInt, Default: "1"},
         },
         Execute: func(ctx *kommando.Context) error {
+            name, _ := ctx.String("name")
             times, _ := ctx.Int("times")
             for i := 0; i < int(times); i++ {
-                fmt.Fprintln(ctx.Output(), "Hello!")
+                fmt.Fprintf(ctx.Output(), "Hello, %s!\n", name)
             }
             return nil
         },
@@ -47,32 +63,129 @@ func main() {
 }
 ```
 
+```
+$ myapp greet -n Alice -t 3
+Hello, Alice!
+Hello, Alice!
+Hello, Alice!
+
+$ myapp greet --help
+greet - Greet someone
+Aliases: g
+Flags:
+  -n, --name <string>   who to greet
+  -t, --times <int>     repeat N times
+Global Flags:
+  -v, --verbose <bool>  verbose output
+```
+
+### Subcommands
+
+```go
+app.AddCommand(&kommando.Command{
+    Name:        "server",
+    Description: "Server management",
+    SubCommands: []*kommando.Command{
+        {
+            Name:        "start",
+            Description: "Start the server",
+            Flags: []kommando.Flag{
+                {Name: "port", Short: 'p', Type: kommando.FlagInt, Default: "8080", Env: "APP_PORT"},
+            },
+            Execute: func(ctx *kommando.Context) error {
+                port, _ := ctx.Int("port")
+                fmt.Fprintf(ctx.Output(), "Listening on :%d\n", port)
+                return nil
+            },
+        },
+        {
+            Name:        "stop",
+            Description: "Stop the server",
+            Execute: func(ctx *kommando.Context) error {
+                fmt.Fprintln(ctx.Output(), "Server stopped.")
+                return nil
+            },
+        },
+    },
+})
+```
+
+```
+$ myapp server start --port 3000
+Listening on :3000
+
+$ APP_PORT=9090 myapp server start
+Listening on :9090
+
+$ myapp server --help
+server - Server management
+Commands:
+  start            Start the server
+  stop             Stop the server
+```
+
+### Environment Variable Binding
+
+Flags can read values from environment variables. Priority order: **CLI flag > env var > default value**.
+
+```go
+kommando.Flag{
+    Name:     "token",
+    Type:     kommando.FlagString,
+    Required: true,
+    Env:      "API_TOKEN",
+}
+```
+
+```
+$ API_TOKEN=secret myapp deploy    # works without --token flag
+```
+
+### Shell Completion
+
+Built-in `completion` command generates scripts for your shell:
+
+```
+$ myapp completion bash >> ~/.bashrc
+$ myapp completion zsh >> ~/.zshrc
+$ myapp completion fish > ~/.config/fish/completions/myapp.fish
+$ myapp completion powershell >> $PROFILE
+```
+
+Or programmatically:
+
+```go
+app.GenerateCompletion(os.Stdout, kommando.Bash)
+```
+
 ### Error Handling
 
 Kommando returns errors instead of panicking. Use `errors.Is` to check for specific conditions:
 
 ```go
-import "errors"
-
 err := app.Run(os.Args[1:])
 if errors.Is(err, kommando.ErrCommandNotFound) {
-    // handle unknown command
+    // unknown command
 }
 if errors.Is(err, kommando.ErrRequiredFlag) {
-    // handle missing required flag
+    // missing required flag
 }
 ```
 
 ### Available Errors
 
-- `ErrDuplicateCommand` - a command with that name already exists
-- `ErrRequiredFlag` - a required flag was not provided
-- `ErrInvalidFlagValue` - a flag value could not be parsed as the expected type
-- `ErrCommandNotFound` - the specified command does not exist
+| Error | Description |
+|-------|-------------|
+| `ErrDuplicateCommand` | A command with that name already exists |
+| `ErrRequiredFlag` | A required flag was not provided |
+| `ErrInvalidFlagValue` | Flag value could not be parsed as the expected type |
+| `ErrCommandNotFound` | The specified command does not exist |
 
 ### Flag Types
 
-- `kommando.FlagString` (default)
-- `kommando.FlagBool`
-- `kommando.FlagInt`
-- `kommando.FlagFloat`
+| Type | Go accessor | Zero value |
+|------|-------------|------------|
+| `FlagString` (default) | `ctx.String("name")` | `""` |
+| `FlagBool` | `ctx.Bool("verbose")` | `false` |
+| `FlagInt` | `ctx.Int("port")` | `0` |
+| `FlagFloat` | `ctx.Float("rate")` | `0.0` |
