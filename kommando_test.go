@@ -2419,3 +2419,303 @@ func TestFlagCount(t *testing.T) {
 		}
 	})
 }
+
+func TestUsageLine(t *testing.T) {
+	t.Run("usage shown in help", func(t *testing.T) {
+		app, buf := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:        "greet",
+			Description: "Greet someone",
+			Usage:       "greet [flags] <name>",
+			Execute:     func(ctx *Context) error { return nil },
+		})
+
+		_ = app.Run([]string{"help", "greet"})
+		output := buf.String()
+		if !strings.Contains(output, "Usage: greet [flags] <name>") {
+			t.Fatalf("expected usage line in help, got:\n%s", output)
+		}
+	})
+
+	t.Run("no usage when empty", func(t *testing.T) {
+		app, buf := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:        "greet",
+			Description: "Greet someone",
+			Execute:     func(ctx *Context) error { return nil },
+		})
+
+		_ = app.Run([]string{"help", "greet"})
+		output := buf.String()
+		if strings.Contains(output, "Usage:") {
+			t.Fatalf("expected no usage line when empty, got:\n%s", output)
+		}
+	})
+}
+
+func TestExampleInHelp(t *testing.T) {
+	t.Run("example shown in help", func(t *testing.T) {
+		app, buf := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:        "greet",
+			Description: "Greet someone",
+			Example:     "  $ myapp greet --name Alice\n  Hello, Alice!",
+			Execute:     func(ctx *Context) error { return nil },
+		})
+
+		_ = app.Run([]string{"help", "greet"})
+		output := buf.String()
+		if !strings.Contains(output, "Examples:") {
+			t.Fatalf("expected Examples section in help, got:\n%s", output)
+		}
+		if !strings.Contains(output, "$ myapp greet --name Alice") {
+			t.Fatalf("expected example content in help, got:\n%s", output)
+		}
+	})
+
+	t.Run("no example when empty", func(t *testing.T) {
+		app, buf := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:        "greet",
+			Description: "Greet someone",
+			Execute:     func(ctx *Context) error { return nil },
+		})
+
+		_ = app.Run([]string{"help", "greet"})
+		output := buf.String()
+		if strings.Contains(output, "Examples:") {
+			t.Fatalf("expected no Examples section when empty, got:\n%s", output)
+		}
+	})
+}
+
+func TestArgsMin(t *testing.T) {
+	t.Run("too few args", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:    "greet",
+			ArgsMin: 1,
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet"})
+		if !errors.Is(err, ErrInvalidArgs) {
+			t.Fatalf("expected ErrInvalidArgs, got %v", err)
+		}
+	})
+
+	t.Run("exact min args", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:    "greet",
+			ArgsMin: 1,
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet", "alice"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("more than min args", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:    "greet",
+			ArgsMin: 2,
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet", "a", "b", "c"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestArgsMax(t *testing.T) {
+	t.Run("too many args", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:    "greet",
+			ArgsMax: 2,
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet", "a", "b", "c"})
+		if !errors.Is(err, ErrInvalidArgs) {
+			t.Fatalf("expected ErrInvalidArgs, got %v", err)
+		}
+	})
+
+	t.Run("exact max args", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:    "greet",
+			ArgsMax: 2,
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet", "a", "b"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("zero args with max", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:    "greet",
+			ArgsMax: 2,
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestArgsMinMax(t *testing.T) {
+	t.Run("below min", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:    "copy",
+			ArgsMin: 1,
+			ArgsMax: 3,
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"copy"})
+		if !errors.Is(err, ErrInvalidArgs) {
+			t.Fatalf("expected ErrInvalidArgs, got %v", err)
+		}
+	})
+
+	t.Run("above max", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:    "copy",
+			ArgsMin: 1,
+			ArgsMax: 3,
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"copy", "a", "b", "c", "d"})
+		if !errors.Is(err, ErrInvalidArgs) {
+			t.Fatalf("expected ErrInvalidArgs, got %v", err)
+		}
+	})
+
+	t.Run("within range", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:    "copy",
+			ArgsMin: 1,
+			ArgsMax: 3,
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"copy", "a", "b"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestArgsValidator(t *testing.T) {
+	t.Run("validator returns error", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name: "process",
+			ArgsValidator: func(args []string) error {
+				if len(args) == 0 {
+					return fmt.Errorf("at least one file required")
+				}
+				return nil
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"process"})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if err.Error() != "at least one file required" {
+			t.Fatalf("expected custom error message, got: %v", err)
+		}
+	})
+
+	t.Run("validator returns nil", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name: "process",
+			ArgsValidator: func(args []string) error {
+				return nil
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"process", "file.txt"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("validator overrides ArgsMin/ArgsMax", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name:    "process",
+			ArgsMin: 5,
+			ArgsMax: 10,
+			ArgsValidator: func(args []string) error {
+				// Custom validator accepts any number of args.
+				return nil
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		// Would fail with ArgsMin=5, but validator overrides.
+		err := app.Run([]string{"process", "one"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestArgsValidationWithSubcommands(t *testing.T) {
+	app, _ := newTestApp("myapp")
+	_ = app.AddCommand(&Command{
+		Name: "server",
+		SubCommands: []*Command{
+			{
+				Name:    "start",
+				ArgsMin: 1,
+				ArgsMax: 1,
+				Execute: func(ctx *Context) error { return nil },
+			},
+		},
+	})
+
+	t.Run("subcommand too few args", func(t *testing.T) {
+		err := app.Run([]string{"server", "start"})
+		if !errors.Is(err, ErrInvalidArgs) {
+			t.Fatalf("expected ErrInvalidArgs, got %v", err)
+		}
+	})
+
+	t.Run("subcommand correct args", func(t *testing.T) {
+		err := app.Run([]string{"server", "start", "prod"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("subcommand too many args", func(t *testing.T) {
+		err := app.Run([]string{"server", "start", "prod", "extra"})
+		if !errors.Is(err, ErrInvalidArgs) {
+			t.Fatalf("expected ErrInvalidArgs, got %v", err)
+		}
+	})
+}

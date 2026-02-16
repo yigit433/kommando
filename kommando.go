@@ -158,6 +158,22 @@ func (a *App) Run(args []string) error {
 		return err
 	}
 
+	// Args validation.
+	if cmd.ArgsValidator != nil {
+		if err := cmd.ArgsValidator(positional); err != nil {
+			return err
+		}
+	} else {
+		if cmd.ArgsMin > 0 && len(positional) < cmd.ArgsMin {
+			return fmt.Errorf("%w: command %q requires at least %d argument(s), got %d",
+				ErrInvalidArgs, cmd.Name, cmd.ArgsMin, len(positional))
+		}
+		if cmd.ArgsMax > 0 && len(positional) > cmd.ArgsMax {
+			return fmt.Errorf("%w: command %q accepts at most %d argument(s), got %d",
+				ErrInvalidArgs, cmd.Name, cmd.ArgsMax, len(positional))
+		}
+	}
+
 	ctx := &Context{
 		command: cmd,
 		args:    positional,
@@ -262,21 +278,29 @@ func (a *App) printCommandHelp(cmd *Command) {
 		fmt.Fprintf(a.output, "Aliases: %s\n", strings.Join(cmd.Aliases, ", "))
 	}
 
+	if cmd.Usage != "" {
+		fmt.Fprintf(a.output, "\nUsage: %s\n", cmd.Usage)
+	}
+
 	if len(cmd.SubCommands) > 0 {
-		fmt.Fprintln(a.output, "Commands:")
+		fmt.Fprintln(a.output, "\nCommands:")
 		for _, sub := range cmd.SubCommands {
 			fmt.Fprintf(a.output, "  %-16s %s\n", sub.Name, sub.Description)
 		}
 	}
 
 	if len(cmd.Flags) > 0 {
-		fmt.Fprintln(a.output, "Flags:")
+		fmt.Fprintln(a.output, "\nFlags:")
 		a.printFlagList(cmd.Flags)
 	}
 
 	if len(a.globalFlags) > 0 {
-		fmt.Fprintln(a.output, "Global Flags:")
+		fmt.Fprintln(a.output, "\nGlobal Flags:")
 		a.printFlagList(a.globalFlags)
+	}
+
+	if cmd.Example != "" {
+		fmt.Fprintf(a.output, "\nExamples:\n%s\n", cmd.Example)
 	}
 }
 

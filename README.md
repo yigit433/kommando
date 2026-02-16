@@ -124,6 +124,73 @@ Commands:
   stop             Stop the server
 ```
 
+### Usage Line & Examples
+
+Add a custom usage line and example block to any command:
+
+```go
+app.AddCommand(&kommando.Command{
+    Name:        "greet",
+    Description: "Greet someone",
+    Usage:       "greet [flags] <name>",
+    Example:     "  $ myapp greet --name Alice\n  Hello, Alice!",
+    Flags: []kommando.Flag{
+        {Name: "name", Short: 'n', Type: kommando.FlagString, Default: "World"},
+    },
+    Execute: func(ctx *kommando.Context) error {
+        name, _ := ctx.String("name")
+        fmt.Fprintf(ctx.Output(), "Hello, %s!\n", name)
+        return nil
+    },
+})
+```
+
+```
+$ myapp greet --help
+greet - Greet someone
+
+Usage: greet [flags] <name>
+
+Flags:
+  -n, --name <string>   who to greet
+
+Examples:
+  $ myapp greet --name Alice
+  Hello, Alice!
+```
+
+### Argument Validation
+
+Constrain the number of positional arguments with `ArgsMin` and `ArgsMax`:
+
+```go
+app.AddCommand(&kommando.Command{
+    Name:    "copy",
+    ArgsMin: 2,
+    ArgsMax: 2,
+    Execute: func(ctx *kommando.Context) error {
+        args := ctx.Args()
+        fmt.Fprintf(ctx.Output(), "Copying %s to %s\n", args[0], args[1])
+        return nil
+    },
+})
+```
+
+Or use a custom validator for full control (overrides `ArgsMin`/`ArgsMax`):
+
+```go
+app.AddCommand(&kommando.Command{
+    Name: "process",
+    ArgsValidator: func(args []string) error {
+        if len(args) == 0 {
+            return fmt.Errorf("at least one file required")
+        }
+        return nil
+    },
+    Execute: func(ctx *kommando.Context) error { /* ... */ return nil },
+})
+```
+
 ### Environment Variable Binding
 
 Flags can read values from environment variables. Priority order: **CLI flag > env var > default value**.
@@ -204,6 +271,7 @@ $ myapp greet --name Alice -- --not-a-flag
 | `ErrUnknownFlag` | A flag not defined for the command was provided |
 | `ErrUnsupportedShell` | Completion requested for an unsupported shell |
 | `ErrInvalidName` | A command or flag has an empty name |
+| `ErrInvalidArgs` | Positional argument count violates ArgsMin/ArgsMax or custom ArgsValidator |
 
 ### Flag Types
 

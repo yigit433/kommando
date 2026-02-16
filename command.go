@@ -64,6 +64,11 @@ type Command struct {
 	Name string
 	// Description is a short explanation of the command's purpose.
 	Description string
+	// Usage is a custom usage line shown in help (e.g. "greet [flags] <name>").
+	Usage string
+	// Example is an optional example block shown at the end of help output.
+	// Can be multiline.
+	Example string
 	// Flags defines the flags accepted by this command.
 	Flags []Flag
 	// Aliases are alternative names for the command.
@@ -72,6 +77,15 @@ type Command struct {
 	// When SubCommands is set and the first positional argument matches a
 	// subcommand, that subcommand is executed instead of Execute.
 	SubCommands []*Command
+	// ArgsMin is the minimum number of positional arguments required.
+	// Zero means no minimum constraint. Ignored when ArgsValidator is set.
+	ArgsMin int
+	// ArgsMax is the maximum number of positional arguments allowed.
+	// Zero means no maximum constraint. Ignored when ArgsValidator is set.
+	ArgsMax int
+	// ArgsValidator is a custom validation function for positional arguments.
+	// When set, ArgsMin and ArgsMax are ignored.
+	ArgsValidator func([]string) error
 	// Execute is the function called when the command is invoked.
 	// It receives a Context containing parsed flags and arguments.
 	Execute func(ctx *Context) error

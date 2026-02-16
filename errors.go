@@ -30,4 +30,9 @@ var (
 
 	// ErrInvalidName is returned when a command or flag has an empty name.
 	ErrInvalidName = errors.New("invalid name")
+
+	// ErrInvalidArgs is returned when the number of positional arguments
+	// does not satisfy the command's ArgsMin/ArgsMax constraints or when
+	// a custom ArgsValidator returns an error.
+	ErrInvalidArgs = errors.New("invalid arguments")
 )
