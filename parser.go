@@ -10,7 +10,8 @@ import (
 // parseArgs parses raw command-line arguments into positional args and flag values.
 // It supports --flag=value, --flag value, -flag=value, -flag value syntax,
 // and the -- bare separator to stop flag parsing.
-func parseArgs(cmd *Command, raw []string) ([]string, map[string]string, error) {
+// When allowUnknown is false, any flag not defined on the command returns ErrUnknownFlag.
+func parseArgs(cmd *Command, raw []string, allowUnknown bool) ([]string, map[string]string, error) {
 	var positional []string
 	flags := make(map[string]string)
 	stopFlags := false
@@ -32,7 +33,7 @@ func parseArgs(cmd *Command, raw []string) ([]string, map[string]string, error) 
 			continue
 		}
 
-		name, value, consumed, err := parseFlag(cmd, raw, i)
+		name, value, consumed, err := parseFlag(cmd, raw, i, allowUnknown)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -74,8 +75,14 @@ func parseArgs(cmd *Command, raw []string) ([]string, map[string]string, error) 
 // parseFlag parses a single flag starting at raw[i].
 // It returns the canonical flag name, value, number of consumed arguments, and any error.
 // Short flags (e.g. -v) are resolved to their long name (e.g. "verbose").
-func parseFlag(cmd *Command, raw []string, i int) (string, string, int, error) {
+// When allowUnknown is false, unrecognized flags return ErrUnknownFlag.
+func parseFlag(cmd *Command, raw []string, i int, allowUnknown bool) (string, string, int, error) {
 	arg := raw[i]
+
+	// Reject args with 3+ leading dashes (e.g. ---flag).
+	if strings.HasPrefix(arg, "---") {
+		return "", "", 0, fmt.Errorf("%w: %s", ErrInvalidFlagValue, arg)
+	}
 
 	// Strip leading dashes.
 	name := strings.TrimLeft(arg, "-")
@@ -87,6 +94,9 @@ func parseFlag(cmd *Command, raw []string, i int) (string, string, int, error) {
 
 		f := findFlag(cmd, flagName)
 		if f == nil {
+			if !allowUnknown {
+				return "", "", 0, fmt.Errorf("%w: --%s", ErrUnknownFlag, flagName)
+			}
 			return flagName, flagValue, 1, nil
 		}
 		if err := validateFlagValue(f, flagValue); err != nil {
@@ -97,6 +107,10 @@ func parseFlag(cmd *Command, raw []string, i int) (string, string, int, error) {
 
 	// Resolve short/long name via findFlag.
 	f := findFlag(cmd, name)
+
+	if f == nil && !allowUnknown {
+		return "", "", 0, fmt.Errorf("%w: --%s", ErrUnknownFlag, name)
+	}
 
 	// Handle boolean flags that don't require a value.
 	if f != nil && f.Type == FlagBool {

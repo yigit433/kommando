@@ -14,7 +14,7 @@ A minimalist CLI framework for Go.
 ### Installation
 
 ```
-go get github.com/yigit433/kommando
+go get github.com/yigit433/kommando/v3
 ```
 
 ### Quick Start
@@ -26,7 +26,7 @@ import (
     "fmt"
     "os"
 
-    "github.com/yigit433/kommando/v2"
+    "github.com/yigit433/kommando/v3"
 )
 
 func main() {
@@ -172,6 +172,27 @@ if errors.Is(err, kommando.ErrRequiredFlag) {
 }
 ```
 
+### Unknown Flag Handling
+
+By default, unknown flags return an error. Use `WithAllowUnknownFlags` to accept them:
+
+```go
+// Default: unknown flags cause ErrUnknownFlag
+app := kommando.New("myapp")
+
+// Allow unknown flags (values accessible via ctx.String)
+app := kommando.New("myapp", kommando.WithAllowUnknownFlags())
+```
+
+### Bare `--` Separator
+
+Everything after a bare `--` is treated as positional arguments, even if it looks like a flag:
+
+```
+$ myapp greet --name Alice -- --not-a-flag
+# Args: ["--not-a-flag"], Flags: {name: "Alice"}
+```
+
 ### Available Errors
 
 | Error | Description |
@@ -180,6 +201,9 @@ if errors.Is(err, kommando.ErrRequiredFlag) {
 | `ErrRequiredFlag` | A required flag was not provided |
 | `ErrInvalidFlagValue` | Flag value could not be parsed as the expected type |
 | `ErrCommandNotFound` | The specified command does not exist |
+| `ErrUnknownFlag` | A flag not defined for the command was provided |
+| `ErrUnsupportedShell` | Completion requested for an unsupported shell |
+| `ErrInvalidName` | A command or flag has an empty name |
 
 ### Flag Types
 

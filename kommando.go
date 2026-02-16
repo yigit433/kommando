@@ -13,12 +13,13 @@ import (
 
 // App is the top-level CLI application.
 type App struct {
-	name        string
-	description string
-	commands    []*Command
-	globalFlags []Flag
-	output      io.Writer
-	helpAdded   bool
+	name              string
+	description       string
+	commands          []*Command
+	globalFlags       []Flag
+	output            io.Writer
+	helpAdded         bool
+	allowUnknownFlags bool
 }
 
 // Option configures an App.
@@ -48,6 +49,16 @@ func WithGlobalFlags(flags ...Flag) Option {
 	}
 }
 
+// WithAllowUnknownFlags disables the unknown flag error.
+// By default, unknown flags cause an ErrUnknownFlag error.
+// When this option is set, unknown flags are silently accepted
+// and their values are accessible through the Context.
+func WithAllowUnknownFlags() Option {
+	return func(a *App) {
+		a.allowUnknownFlags = true
+	}
+}
+
 // New creates a new CLI application with the given name and options.
 func New(name string, opts ...Option) *App {
 	a := &App{
@@ -61,8 +72,18 @@ func New(name string, opts ...Option) *App {
 }
 
 // AddCommand registers a command with the application.
-// It returns ErrDuplicateCommand if a command with the same name already exists.
+// It returns ErrInvalidName if the command name is empty,
+// ErrDuplicateCommand if a command with the same name already exists,
+// or ErrInvalidName if any flag has an empty name.
 func (a *App) AddCommand(cmd *Command) error {
+	if cmd.Name == "" {
+		return fmt.Errorf("%w: command name cannot be empty", ErrInvalidName)
+	}
+	for _, f := range cmd.Flags {
+		if f.Name == "" {
+			return fmt.Errorf("%w: flag name cannot be empty in command %q", ErrInvalidName, cmd.Name)
+		}
+	}
 	for _, existing := range a.commands {
 		if existing.Name == cmd.Name {
 			return fmt.Errorf("%w: %s", ErrDuplicateCommand, cmd.Name)
@@ -132,7 +153,7 @@ func (a *App) Run(args []string) error {
 	// Merge global flags with command flags. Command flags take precedence.
 	mergedCmd := a.mergeGlobalFlags(cmd)
 
-	positional, flags, err := parseArgs(mergedCmd, cmdArgs)
+	positional, flags, err := parseArgs(mergedCmd, cmdArgs, a.allowUnknownFlags)
 	if err != nil {
 		return err
 	}
@@ -207,6 +228,12 @@ func (a *App) printCommandList() {
 	fmt.Fprintln(a.output)
 	for _, cmd := range a.commands {
 		fmt.Fprintf(a.output, "  %-16s %s\n", cmd.Name, cmd.Description)
+	}
+
+	if len(a.globalFlags) > 0 {
+		fmt.Fprintln(a.output)
+		fmt.Fprintln(a.output, "Global Flags:")
+		a.printFlagList(a.globalFlags)
 	}
 }
 

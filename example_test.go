@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/yigit433/kommando"
+	"github.com/yigit433/kommando/v3"
 )
 
 func ExampleNew() {

@@ -19,4 +19,15 @@ var (
 	// ErrCommandNotFound is returned when the specified command does not
 	// exist in the application.
 	ErrCommandNotFound = errors.New("command not found")
+
+	// ErrUnknownFlag is returned when a flag is not defined for the command.
+	// Use WithAllowUnknownFlags to disable this check.
+	ErrUnknownFlag = errors.New("unknown flag")
+
+	// ErrUnsupportedShell is returned when requesting completion for
+	// an unsupported shell type.
+	ErrUnsupportedShell = errors.New("unsupported shell")
+
+	// ErrInvalidName is returned when a command or flag has an empty name.
+	ErrInvalidName = errors.New("invalid name")
 )

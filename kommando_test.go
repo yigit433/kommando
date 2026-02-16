@@ -232,7 +232,7 @@ func TestParseArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args, flags, err := parseArgs(cmd, tt.raw)
+			args, flags, err := parseArgs(cmd, tt.raw, false)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -616,7 +616,7 @@ func TestShortFlag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args, flags, err := parseArgs(cmd, tt.raw)
+			args, flags, err := parseArgs(cmd, tt.raw, false)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -1477,8 +1477,8 @@ func TestCompletion(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for unsupported shell")
 		}
-		if !strings.Contains(err.Error(), "unsupported shell") {
-			t.Fatalf("expected 'unsupported shell' error, got: %v", err)
+		if !errors.Is(err, ErrUnsupportedShell) {
+			t.Fatalf("expected ErrUnsupportedShell, got: %v", err)
 		}
 	})
 
@@ -1503,4 +1503,338 @@ func TestCompletion(t *testing.T) {
 			t.Fatalf("expected usage message, got:\n%s", buf.String())
 		}
 	})
+}
+
+func TestUnknownFlags(t *testing.T) {
+	t.Run("unknown flag returns error by default", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		app.AddCommand(&Command{
+			Name: "greet",
+			Flags: []Flag{
+				{Name: "name", Type: FlagString},
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet", "--unknown", "value"})
+		if err == nil {
+			t.Fatal("expected error for unknown flag, got nil")
+		}
+		if !errors.Is(err, ErrUnknownFlag) {
+			t.Fatalf("expected ErrUnknownFlag, got: %v", err)
+		}
+	})
+
+	t.Run("unknown flag with equals syntax returns error", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		app.AddCommand(&Command{
+			Name: "greet",
+			Flags: []Flag{
+				{Name: "name", Type: FlagString},
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet", "--unknown=value"})
+		if err == nil {
+			t.Fatal("expected error for unknown flag, got nil")
+		}
+		if !errors.Is(err, ErrUnknownFlag) {
+			t.Fatalf("expected ErrUnknownFlag, got: %v", err)
+		}
+	})
+
+	t.Run("unknown short flag returns error", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		app.AddCommand(&Command{
+			Name: "greet",
+			Flags: []Flag{
+				{Name: "name", Short: 'n', Type: FlagString},
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet", "-x", "value"})
+		if err == nil {
+			t.Fatal("expected error for unknown short flag, got nil")
+		}
+		if !errors.Is(err, ErrUnknownFlag) {
+			t.Fatalf("expected ErrUnknownFlag, got: %v", err)
+		}
+	})
+
+	t.Run("known flags still work", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got string
+		app.AddCommand(&Command{
+			Name: "greet",
+			Flags: []Flag{
+				{Name: "name", Type: FlagString},
+			},
+			Execute: func(ctx *Context) error {
+				got, _ = ctx.String("name")
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"greet", "--name", "alice"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "alice" {
+			t.Fatalf("expected name=alice, got %q", got)
+		}
+	})
+
+	t.Run("error message contains flag name", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		app.AddCommand(&Command{
+			Name:    "greet",
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet", "--foo", "bar"})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "foo") {
+			t.Fatalf("expected error to contain flag name 'foo', got: %v", err)
+		}
+	})
+}
+
+func TestWithAllowUnknownFlags(t *testing.T) {
+	t.Run("unknown flags accepted when allowed", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		app.allowUnknownFlags = true
+		var got string
+		app.AddCommand(&Command{
+			Name: "greet",
+			Flags: []Flag{
+				{Name: "name", Type: FlagString},
+			},
+			Execute: func(ctx *Context) error {
+				got, _ = ctx.String("unknown")
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"greet", "--name", "alice", "--unknown", "value"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "value" {
+			t.Fatalf("expected unknown=value, got %q", got)
+		}
+	})
+
+	t.Run("unknown flags with equals accepted when allowed", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		app.allowUnknownFlags = true
+		var got string
+		app.AddCommand(&Command{
+			Name:    "greet",
+			Execute: func(ctx *Context) error {
+				got, _ = ctx.String("foo")
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"greet", "--foo=bar"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "bar" {
+			t.Fatalf("expected foo=bar, got %q", got)
+		}
+	})
+
+	t.Run("option function sets field", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		app := New("myapp", WithOutput(buf), WithAllowUnknownFlags())
+		app.AddCommand(&Command{
+			Name:    "greet",
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet", "--whatever", "test"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("known flag validation still applies", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		app.allowUnknownFlags = true
+		app.AddCommand(&Command{
+			Name: "greet",
+			Flags: []Flag{
+				{Name: "count", Type: FlagInt},
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"greet", "--count", "notint"})
+		if err == nil {
+			t.Fatal("expected error for invalid int, got nil")
+		}
+		if !errors.Is(err, ErrInvalidFlagValue) {
+			t.Fatalf("expected ErrInvalidFlagValue, got: %v", err)
+		}
+	})
+}
+
+func TestTripleDash(t *testing.T) {
+	t.Run("triple dash returns error", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "name", Type: FlagString},
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+
+		err := app.Run([]string{"test", "---name", "value"})
+		if err == nil {
+			t.Fatal("expected error for triple-dash flag, got nil")
+		}
+		if !errors.Is(err, ErrInvalidFlagValue) {
+			t.Fatalf("expected ErrInvalidFlagValue, got: %v", err)
+		}
+	})
+
+	t.Run("triple dash after bare separator is positional", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got []string
+		app.AddCommand(&Command{
+			Name: "test",
+			Execute: func(ctx *Context) error {
+				got = ctx.Args()
+				return nil
+			},
+		})
+
+		err := app.Run([]string{"test", "--", "---weird"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 1 || got[0] != "---weird" {
+			t.Fatalf("expected [---weird], got %v", got)
+		}
+	})
+}
+
+func TestInvalidName(t *testing.T) {
+	t.Run("empty command name", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		err := app.AddCommand(&Command{
+			Name:    "",
+			Execute: func(ctx *Context) error { return nil },
+		})
+		if err == nil {
+			t.Fatal("expected error for empty command name, got nil")
+		}
+		if !errors.Is(err, ErrInvalidName) {
+			t.Fatalf("expected ErrInvalidName, got: %v", err)
+		}
+	})
+
+	t.Run("empty flag name", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		err := app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "", Type: FlagString},
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+		if err == nil {
+			t.Fatal("expected error for empty flag name, got nil")
+		}
+		if !errors.Is(err, ErrInvalidName) {
+			t.Fatalf("expected ErrInvalidName, got: %v", err)
+		}
+	})
+
+	t.Run("valid names pass", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		err := app.AddCommand(&Command{
+			Name: "greet",
+			Flags: []Flag{
+				{Name: "name", Type: FlagString},
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestGlobalFlagsInCommandList(t *testing.T) {
+	var buf bytes.Buffer
+	app := New("myapp",
+		WithOutput(&buf),
+		WithGlobalFlags(
+			Flag{Name: "verbose", Short: 'v', Type: FlagBool, Description: "enable verbose"},
+		),
+	)
+	app.AddCommand(&Command{
+		Name:        "test",
+		Description: "a test command",
+		Execute:     func(ctx *Context) error { return nil },
+	})
+
+	// Run with no args to show command list.
+	err := app.Run([]string{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, "Global Flags:") {
+		t.Fatalf("expected 'Global Flags:' in command list, got:\n%s", output)
+	}
+	if !strings.Contains(output, "verbose") {
+		t.Fatalf("expected global flag 'verbose' in command list, got:\n%s", output)
+	}
+}
+
+func TestShellString(t *testing.T) {
+	tests := []struct {
+		shell Shell
+		want  string
+	}{
+		{Bash, "bash"},
+		{Zsh, "zsh"},
+		{Fish, "fish"},
+		{PowerShell, "powershell"},
+		{Shell("custom"), "custom"},
+	}
+	for _, tt := range tests {
+		if got := tt.shell.String(); got != tt.want {
+			t.Fatalf("Shell(%q).String() = %q, want %q", tt.want, got, tt.want)
+		}
+	}
+}
+
+func TestErrUnsupportedShell(t *testing.T) {
+	var buf bytes.Buffer
+	app := New("myapp", WithOutput(&buf))
+	app.AddCommand(&Command{
+		Name:    "test",
+		Execute: func(ctx *Context) error { return nil },
+	})
+
+	err := app.GenerateCompletion(&buf, Shell("nushell"))
+	if err == nil {
+		t.Fatal("expected error for unsupported shell")
+	}
+	if !errors.Is(err, ErrUnsupportedShell) {
+		t.Fatalf("expected ErrUnsupportedShell, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "nushell") {
+		t.Fatalf("expected error to contain shell name, got: %v", err)
+	}
 }

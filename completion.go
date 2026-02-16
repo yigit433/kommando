@@ -9,6 +9,11 @@ import (
 // Shell represents a shell type for completion script generation.
 type Shell string
 
+// String returns the string representation of the Shell.
+func (s Shell) String() string {
+	return string(s)
+}
+
 const (
 	Bash       Shell = "bash"
 	Zsh        Shell = "zsh"
@@ -30,7 +35,7 @@ func (a *App) GenerateCompletion(w io.Writer, shell Shell) error {
 	case PowerShell:
 		return a.generatePowerShell(w)
 	default:
-		return fmt.Errorf("unsupported shell: %s", shell)
+		return fmt.Errorf("%w: %s", ErrUnsupportedShell, shell)
 	}
 }
 
