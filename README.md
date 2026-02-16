@@ -213,3 +213,37 @@ $ myapp greet --name Alice -- --not-a-flag
 | `FlagBool` | `ctx.Bool("verbose")` | `false` |
 | `FlagInt` | `ctx.Int("port")` | `0` |
 | `FlagFloat` | `ctx.Float("rate")` | `0.0` |
+| `FlagStringSlice` | `ctx.StringSlice("tag")` | `nil` |
+| `FlagCount` | `ctx.Count("verbose")` | `0` |
+
+### Slice Flags
+
+`FlagStringSlice` collects multiple string values via repetition or commas:
+
+```go
+kommando.Flag{Name: "tag", Short: 't', Type: kommando.FlagStringSlice}
+```
+
+```
+$ myapp test --tag a --tag b        # ["a", "b"]
+$ myapp test --tag a,b,c            # ["a", "b", "c"]
+$ myapp test --tag a,b --tag c      # ["a", "b", "c"]
+$ myapp test --tag=x,y              # ["x", "y"]
+```
+
+Environment variables and defaults use comma-separated values: `TAG=a,b,c` or `Default: "x,y"`.
+
+### Count Flags
+
+`FlagCount` increments a counter each time the flag appears:
+
+```go
+kommando.Flag{Name: "verbose", Short: 'v', Type: kommando.FlagCount}
+```
+
+```
+$ myapp test --verbose              # 1
+$ myapp test --verbose --verbose    # 2
+$ myapp test -vvv                   # 3
+$ myapp test -vv --verbose          # 3
+```

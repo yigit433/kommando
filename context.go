@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 )
 
 // Context provides access to parsed flags, positional arguments,
@@ -65,6 +66,27 @@ func (c *Context) Int(name string) (int64, error) {
 		return 0, fmt.Errorf("%w: flag %q: %v", ErrInvalidFlagValue, name, err)
 	}
 	return n, nil
+}
+
+// StringSlice returns the string slice value of the named flag and true if it was set.
+// If the flag was not provided, it returns (nil, false).
+func (c *Context) StringSlice(name string) ([]string, bool) {
+	v, ok := c.flags[name]
+	if !ok {
+		return nil, false
+	}
+	return strings.Split(v, sliceSep), true
+}
+
+// Count returns the count value of the named flag.
+// If the flag was not set, it returns 0.
+func (c *Context) Count(name string) int {
+	v, ok := c.flags[name]
+	if !ok {
+		return 0
+	}
+	n, _ := strconv.Atoi(v)
+	return n
 }
 
 // Float returns the float64 value of the named flag.

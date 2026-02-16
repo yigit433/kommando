@@ -12,6 +12,11 @@ const (
 	FlagInt
 	// FlagFloat represents a floating-point flag.
 	FlagFloat
+	// FlagStringSlice represents a repeatable string flag that collects multiple values.
+	// Values can be provided via repetition (--tag a --tag b) or commas (--tag a,b,c).
+	FlagStringSlice
+	// FlagCount represents a counter flag incremented by repetition (e.g. -vvv → 3).
+	FlagCount
 )
 
 // String returns the string representation of a FlagType.
@@ -23,6 +28,10 @@ func (ft FlagType) String() string {
 		return "int"
 	case FlagFloat:
 		return "float"
+	case FlagStringSlice:
+		return "[]string"
+	case FlagCount:
+		return "count"
 	default:
 		return "string"
 	}

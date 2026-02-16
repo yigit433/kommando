@@ -530,6 +530,8 @@ func TestFlagTypeString(t *testing.T) {
 		{FlagBool, "bool"},
 		{FlagInt, "int"},
 		{FlagFloat, "float"},
+		{FlagStringSlice, "[]string"},
+		{FlagCount, "count"},
 	}
 	for _, tt := range tests {
 		if got := tt.ft.String(); got != tt.want {
@@ -2014,4 +2016,406 @@ func TestErrUnsupportedShell(t *testing.T) {
 	if !strings.Contains(err.Error(), "nushell") {
 		t.Fatalf("expected error to contain shell name, got: %v", err)
 	}
+}
+
+func TestFlagStringSlice(t *testing.T) {
+	t.Run("repeated long flags", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got []string
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "tag", Short: 't', Type: FlagStringSlice},
+			},
+			Execute: func(ctx *Context) error {
+				got, _ = ctx.StringSlice("tag")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "--tag", "a", "--tag", "b"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+			t.Fatalf("expected [a b], got %v", got)
+		}
+	})
+
+	t.Run("comma separated", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got []string
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "tag", Type: FlagStringSlice},
+			},
+			Execute: func(ctx *Context) error {
+				got, _ = ctx.StringSlice("tag")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "--tag", "a,b,c"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 3 || got[0] != "a" || got[1] != "b" || got[2] != "c" {
+			t.Fatalf("expected [a b c], got %v", got)
+		}
+	})
+
+	t.Run("mixed repeated and comma", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got []string
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "tag", Type: FlagStringSlice},
+			},
+			Execute: func(ctx *Context) error {
+				got, _ = ctx.StringSlice("tag")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "--tag", "a,b", "--tag", "c"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 3 || got[0] != "a" || got[1] != "b" || got[2] != "c" {
+			t.Fatalf("expected [a b c], got %v", got)
+		}
+	})
+
+	t.Run("equals syntax", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got []string
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "tag", Type: FlagStringSlice},
+			},
+			Execute: func(ctx *Context) error {
+				got, _ = ctx.StringSlice("tag")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "--tag=a,b"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+			t.Fatalf("expected [a b], got %v", got)
+		}
+	})
+
+	t.Run("short flag repeated", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got []string
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "tag", Short: 't', Type: FlagStringSlice},
+			},
+			Execute: func(ctx *Context) error {
+				got, _ = ctx.StringSlice("tag")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "-t", "a", "-t", "b"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+			t.Fatalf("expected [a b], got %v", got)
+		}
+	})
+
+	t.Run("default value", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got []string
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "tag", Type: FlagStringSlice, Default: "x,y"},
+			},
+			Execute: func(ctx *Context) error {
+				got, _ = ctx.StringSlice("tag")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 2 || got[0] != "x" || got[1] != "y" {
+			t.Fatalf("expected [x y], got %v", got)
+		}
+	})
+
+	t.Run("env value", func(t *testing.T) {
+		t.Setenv("TEST_TAGS", "a,b")
+		app, _ := newTestApp("myapp")
+		var got []string
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "tag", Type: FlagStringSlice, Env: "TEST_TAGS"},
+			},
+			Execute: func(ctx *Context) error {
+				got, _ = ctx.StringSlice("tag")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+			t.Fatalf("expected [a b], got %v", got)
+		}
+	})
+
+	t.Run("required missing", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "tag", Type: FlagStringSlice, Required: true},
+			},
+			Execute: func(ctx *Context) error { return nil },
+		})
+		err := app.Run([]string{"test"})
+		if !errors.Is(err, ErrRequiredFlag) {
+			t.Fatalf("expected ErrRequiredFlag, got %v", err)
+		}
+	})
+
+	t.Run("not set returns nil false", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "tag", Type: FlagStringSlice},
+			},
+			Execute: func(ctx *Context) error {
+				got, ok := ctx.StringSlice("tag")
+				if ok {
+					t.Fatal("expected ok=false for unset flag")
+				}
+				if got != nil {
+					t.Fatalf("expected nil, got %v", got)
+				}
+				return nil
+			},
+		})
+		err := app.Run([]string{"test"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestFlagCount(t *testing.T) {
+	t.Run("single long", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got int
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "verbose", Short: 'v', Type: FlagCount},
+			},
+			Execute: func(ctx *Context) error {
+				got = ctx.Count("verbose")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "--verbose"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 1 {
+			t.Fatalf("expected 1, got %d", got)
+		}
+	})
+
+	t.Run("repeated long", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got int
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "verbose", Short: 'v', Type: FlagCount},
+			},
+			Execute: func(ctx *Context) error {
+				got = ctx.Count("verbose")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "--verbose", "--verbose", "--verbose"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 3 {
+			t.Fatalf("expected 3, got %d", got)
+		}
+	})
+
+	t.Run("bundled short", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got int
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "verbose", Short: 'v', Type: FlagCount},
+			},
+			Execute: func(ctx *Context) error {
+				got = ctx.Count("verbose")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "-vvv"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 3 {
+			t.Fatalf("expected 3, got %d", got)
+		}
+	})
+
+	t.Run("mixed bundled and long", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got int
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "verbose", Short: 'v', Type: FlagCount},
+			},
+			Execute: func(ctx *Context) error {
+				got = ctx.Count("verbose")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "-vv", "--verbose"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 3 {
+			t.Fatalf("expected 3, got %d", got)
+		}
+	})
+
+	t.Run("single short", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got int
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "verbose", Short: 'v', Type: FlagCount},
+			},
+			Execute: func(ctx *Context) error {
+				got = ctx.Count("verbose")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "-v"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 1 {
+			t.Fatalf("expected 1, got %d", got)
+		}
+	})
+
+	t.Run("repeated short", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got int
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "verbose", Short: 'v', Type: FlagCount},
+			},
+			Execute: func(ctx *Context) error {
+				got = ctx.Count("verbose")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "-v", "-v", "-v"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 3 {
+			t.Fatalf("expected 3, got %d", got)
+		}
+	})
+
+	t.Run("not set returns 0", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got int
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "verbose", Short: 'v', Type: FlagCount},
+			},
+			Execute: func(ctx *Context) error {
+				got = ctx.Count("verbose")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 0 {
+			t.Fatalf("expected 0, got %d", got)
+		}
+	})
+
+	t.Run("default value", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var got int
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "verbose", Short: 'v', Type: FlagCount, Default: "2"},
+			},
+			Execute: func(ctx *Context) error {
+				got = ctx.Count("verbose")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != 2 {
+			t.Fatalf("expected 2, got %d", got)
+		}
+	})
+
+	t.Run("with other flags", func(t *testing.T) {
+		app, _ := newTestApp("myapp")
+		var verbosity int
+		var name string
+		_ = app.AddCommand(&Command{
+			Name: "test",
+			Flags: []Flag{
+				{Name: "verbose", Short: 'v', Type: FlagCount},
+				{Name: "name", Short: 'n', Type: FlagString},
+			},
+			Execute: func(ctx *Context) error {
+				verbosity = ctx.Count("verbose")
+				name, _ = ctx.String("name")
+				return nil
+			},
+		})
+		err := app.Run([]string{"test", "-vvv", "--name", "alice"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if verbosity != 3 {
+			t.Fatalf("expected verbose=3, got %d", verbosity)
+		}
+		if name != "alice" {
+			t.Fatalf("expected name=alice, got %q", name)
+		}
+	})
 }
