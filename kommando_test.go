@@ -1819,6 +1819,183 @@ func TestShellString(t *testing.T) {
 	}
 }
 
+func TestRecursiveCompletion(t *testing.T) {
+	// Build a 3-level deep command tree:
+	//   db
+	//   ├── migrate (alias: m)
+	//   │   ├── up   (flags: --steps -n)
+	//   │   └── down
+	//   └── seed
+	makeApp := func() *App {
+		var buf bytes.Buffer
+		app := New("myapp",
+			WithOutput(&buf),
+			WithGlobalFlags(Flag{Name: "verbose", Short: 'v', Type: FlagBool, Description: "verbose output"}),
+		)
+		_ = app.AddCommand(&Command{
+			Name:        "db",
+			Description: "Database operations",
+			SubCommands: []*Command{
+				{
+					Name:        "migrate",
+					Description: "Run migrations",
+					Aliases:     []string{"m"},
+					SubCommands: []*Command{
+						{
+							Name:        "up",
+							Description: "Apply migrations",
+							Flags: []Flag{
+								{Name: "steps", Short: 'n', Type: FlagInt, Description: "number of steps"},
+							},
+						},
+						{
+							Name:        "down",
+							Description: "Rollback migrations",
+						},
+					},
+				},
+				{
+					Name:        "seed",
+					Description: "Seed database",
+				},
+			},
+		})
+		return app
+	}
+
+	t.Run("bash recursive paths", func(t *testing.T) {
+		app := makeApp()
+		var buf bytes.Buffer
+		err := app.GenerateCompletion(&buf, Bash)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		output := buf.String()
+
+		// Resolver should contain entries for all levels.
+		for _, want := range []string{
+			"ROOT/db",
+			"ROOT/db/migrate",
+			"ROOT/db/migrate/up",
+			"ROOT/db/migrate/down",
+			"ROOT/db/seed",
+		} {
+			if !strings.Contains(output, want) {
+				t.Fatalf("expected %q in bash output, got:\n%s", want, output)
+			}
+		}
+
+		// Alias resolver: ROOT/db/m should map to ROOT/db/migrate.
+		if !strings.Contains(output, "ROOT/db/m") {
+			t.Fatalf("expected alias resolver entry ROOT/db/m, got:\n%s", output)
+		}
+
+		// Deepest leaf should have its own flags.
+		if !strings.Contains(output, "--steps") {
+			t.Fatalf("expected --steps flag in leaf completion, got:\n%s", output)
+		}
+
+		// Global flags should appear at every level.
+		if count := strings.Count(output, "--verbose"); count < 3 {
+			t.Fatalf("expected --verbose at multiple levels, found %d times", count)
+		}
+	})
+
+	t.Run("zsh recursive functions", func(t *testing.T) {
+		app := makeApp()
+		var buf bytes.Buffer
+		err := app.GenerateCompletion(&buf, Zsh)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		output := buf.String()
+
+		// Should generate nested functions for each level.
+		for _, want := range []string{
+			"_myapp__db()",
+			"_myapp__db__migrate()",
+			"_myapp__db__migrate__up()",
+			"_myapp__db__migrate__down()",
+			"_myapp__db__seed()",
+		} {
+			if !strings.Contains(output, want) {
+				t.Fatalf("expected zsh function %q, got:\n%s", want, output)
+			}
+		}
+
+		// Alias should route to the canonical function.
+		if !strings.Contains(output, "m) _myapp__db__migrate") {
+			t.Fatalf("expected alias routing for m, got:\n%s", output)
+		}
+
+		// Leaf function should use _arguments for flags.
+		if !strings.Contains(output, "--steps[number of steps]") {
+			t.Fatalf("expected --steps flag in zsh leaf, got:\n%s", output)
+		}
+	})
+
+	t.Run("fish recursive conditions", func(t *testing.T) {
+		app := makeApp()
+		var buf bytes.Buffer
+		err := app.GenerateCompletion(&buf, Fish)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		output := buf.String()
+
+		// Top-level db command.
+		if !strings.Contains(output, "__fish_use_subcommand") {
+			t.Fatalf("expected top-level fish condition, got:\n%s", output)
+		}
+
+		// Chained condition for migrate's subcommands.
+		if !strings.Contains(output, "__fish_seen_subcommand_from db; and __fish_seen_subcommand_from migrate") {
+			t.Fatalf("expected chained condition for migrate children, got:\n%s", output)
+		}
+
+		// Alias should be included in condition.
+		if !strings.Contains(output, "__fish_seen_subcommand_from migrate m") {
+			t.Fatalf("expected alias in fish condition, got:\n%s", output)
+		}
+
+		// Deepest flag should be present.
+		if !strings.Contains(output, "-l steps") {
+			t.Fatalf("expected --steps long flag in fish, got:\n%s", output)
+		}
+	})
+
+	t.Run("powershell recursive paths", func(t *testing.T) {
+		app := makeApp()
+		var buf bytes.Buffer
+		err := app.GenerateCompletion(&buf, PowerShell)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		output := buf.String()
+
+		// Should have completion entries for all levels.
+		for _, want := range []string{
+			"ROOT/db",
+			"ROOT/db/migrate",
+			"ROOT/db/migrate/up",
+		} {
+			if !strings.Contains(output, want) {
+				t.Fatalf("expected %q in powershell output, got:\n%s", want, output)
+			}
+		}
+
+		// Should have alias resolver.
+		if !strings.Contains(output, "ROOT/db/m") {
+			t.Fatalf("expected alias resolver, got:\n%s", output)
+		}
+
+		// Deepest leaf flag.
+		if !strings.Contains(output, "'--steps'") {
+			t.Fatalf("expected --steps in powershell, got:\n%s", output)
+		}
+	})
+}
+
 func TestErrUnsupportedShell(t *testing.T) {
 	var buf bytes.Buffer
 	app := New("myapp", WithOutput(&buf))
